@@ -1,48 +1,33 @@
 <!doctype html>
 <html lang="en">
 	<head>
-		<!-- Basic Page Needs
-  –––––––––––––––––––––––––––––––––––––––––––––––––– -->
 		<meta charset="utf-8" />
-		<title>Chat!</title>
-		<meta name="description" content="" />
-		<meta name="author" content="" />
-
-		<!-- Mobile Specific Metas
-  –––––––––––––––––––––––––––––––––––––––––––––––––– -->
+		<title>Kruze After Dark Live Chat</title>
+		<meta
+			name="description"
+			content="Official live chat for Kruze After Dark by Kristy Kruze."
+		/>
+		<meta name="author" content="Kristy Kruze" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-
-		<!-- FONT
-  –––––––––––––––––––––––––––––––––––––––––––––––––– -->
-
-		<!-- CSS
-  –––––––––––––––––––––––––––––––––––––––––––––––––– -->
+		<meta name="theme-color" content="#07070a" />
 		<link rel="stylesheet" href="css/normalize.css" />
 		<link rel="stylesheet" href="css/skeleton.css" />
 		<link rel="stylesheet" href="styles.css" />
-
-		<!-- Favicon
-  –––––––––––––––––––––––––––––––––––––––––––––––––– -->
 		<link rel="icon" type="image/ico" href="favicon.ico" />
 		<script src="/dist/index.js" type="module"></script>
 	</head>
 	<body>
-		<!-- Primary Page Layout
-  –––––––––––––––––––––––––––––––––––––––––––––––––– -->
-		<div class="container" style="width: 95%; height: 100%">
-			<div class="row" style="height: 100%">
-				<div class="one-third column" style="margin-top: 25%">
-					<h4><b>Chat</b>, powered by Durable Objects</h4>
-					<p>
-						This chat room is hosted in a single Durable Object, running in one
-						process in one machine in one location, very close to the users.
-					</p>
+		<div class="chat-shell">
+			<header class="chat-brand">
+				<div class="live-pill">
+					<span class="live-dot"></span>
+					Live Chat
 				</div>
-				<div class="two-thirds column" id="root"></div>
-			</div>
+				<div class="brand-name">Kruze After Dark</div>
+				<div class="brand-subtitle">@itskristykruze · Knotty By Nature</div>
+			</header>
+			<main id="root"></main>
+			<footer class="chat-note">18+ · Keep it respectful · Enjoy the show</footer>
 		</div>
-
-		<!-- End Document
-  –––––––––––––––––––––––––––––––––––––––––––––––––– -->
 	</body>
 </html>
