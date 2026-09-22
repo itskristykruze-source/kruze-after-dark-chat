@@ -1,8 +1,10 @@
+export type ChatRole = "user" | "host";
+
 export type ChatMessage = {
 	id: string;
 	content: string;
 	user: string;
-	role: "user" | "assistant";
+	role: ChatRole;
 };
 
 export type Message =
@@ -11,45 +13,16 @@ export type Message =
 			id: string;
 			content: string;
 			user: string;
-			role: "user" | "assistant";
+			role: ChatRole;
 	  }
 	| {
 			type: "update";
 			id: string;
 			content: string;
 			user: string;
-			role: "user" | "assistant";
+			role: ChatRole;
 	  }
 	| {
 			type: "all";
 			messages: ChatMessage[];
 	  };
-
-export const names = [
-	"Alice",
-	"Bob",
-	"Charlie",
-	"David",
-	"Eve",
-	"Frank",
-	"Grace",
-	"Heidi",
-	"Ivan",
-	"Judy",
-	"Kevin",
-	"Linda",
-	"Mallory",
-	"Nancy",
-	"Oscar",
-	"Peggy",
-	"Quentin",
-	"Randy",
-	"Steve",
-	"Trent",
-	"Ursula",
-	"Victor",
-	"Walter",
-	"Xavier",
-	"Yvonne",
-	"Zoe",
-];
