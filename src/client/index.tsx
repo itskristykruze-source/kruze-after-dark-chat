@@ -57,6 +57,16 @@ function App() {
 				return;
 			}
 
+			if (message.type === "delete") {
+				setMessages((current) => current.filter((m) => m.id !== message.id));
+				return;
+			}
+
+			if (message.type === "clear") {
+				setMessages([]);
+				return;
+			}
+
 			if (message.type === "add") {
 				setMessages((current) => {
 					const foundIndex = current.findIndex((m) => m.id === message.id);
@@ -173,7 +183,28 @@ function App() {
 								<span>{message.user}</span>
 								{message.role === "host" && <b className="host-badge">HOST</b>}
 							</div>
-							<div className="ten columns">{message.content}</div>
+							<div className="ten columns message-body">
+								<span>{message.content}</span>
+								{isHost && (
+									<button
+										type="button"
+										className="delete-message"
+										aria-label="Delete message"
+										title="Delete message"
+										onClick={() => {
+											socket.send(
+												JSON.stringify({
+													type: "delete",
+													id: message.id,
+													authToken: HOST_TOKEN,
+												} satisfies Message),
+											);
+										}}
+									>
+										×
+									</button>
+								)}
+							</div>
 						</div>
 					))}
 				</div>
@@ -202,6 +233,7 @@ function App() {
 							JSON.stringify({
 								type: "add",
 								...chatMessage,
+								authToken: isHost ? HOST_TOKEN : undefined,
 							} satisfies Message),
 						);
 
@@ -213,10 +245,28 @@ function App() {
 							Chatting as <strong>{name || "Guest"}</strong>
 							{isHost && <b className="host-badge identity-host">HOST</b>}
 						</span>
-						{!isHost && name && (
-							<button type="button" className="change-name" onClick={changeName}>
-								Change
+						{isHost ? (
+							<button
+								type="button"
+								className="clear-chat"
+								onClick={() => {
+									if (!window.confirm("Clear every message from this live chat?")) return;
+									socket.send(
+										JSON.stringify({
+											type: "clear",
+											authToken: HOST_TOKEN,
+										} satisfies Message),
+									);
+								}}
+							>
+								Clear chat
 							</button>
+						) : (
+							name && (
+								<button type="button" className="change-name" onClick={changeName}>
+									Change
+								</button>
+							)
 						)}
 					</div>
 
