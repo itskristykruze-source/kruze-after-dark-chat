@@ -1,10 +1,16 @@
-export type ChatRole = "user" | "host";
+export type ChatRole = "user" | "host" | "mod";
 
 export type ChatMessage = {
 	id: string;
 	content: string;
 	user: string;
 	role: ChatRole;
+	viewerId?: string;
+};
+
+export type BanEntry = {
+	viewerId: string;
+	user: string;
 };
 
 export type Message =
@@ -14,7 +20,6 @@ export type Message =
 			content: string;
 			user: string;
 			role: ChatRole;
-			authToken?: string;
 	  }
 	| {
 			type: "update";
@@ -22,16 +27,38 @@ export type Message =
 			content: string;
 			user: string;
 			role: ChatRole;
-			authToken?: string;
 	  }
 	| {
 			type: "delete";
 			id: string;
-			authToken?: string;
 	  }
 	| {
 			type: "clear";
-			authToken?: string;
+	  }
+	| {
+			type: "kick";
+			viewerId: string;
+	  }
+	| {
+			type: "ban";
+			viewerId: string;
+	  }
+	| {
+			type: "unban";
+			viewerId: string;
+	  }
+	| {
+			type: "auth";
+			role: ChatRole;
+			bans?: BanEntry[];
+	  }
+	| {
+			type: "bans";
+			bans: BanEntry[];
+	  }
+	| {
+			type: "moderation";
+			action: "kicked" | "banned";
 	  }
 	| {
 			type: "all";
