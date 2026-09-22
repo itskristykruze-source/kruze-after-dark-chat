@@ -14,6 +14,7 @@ export type Message =
 			content: string;
 			user: string;
 			role: ChatRole;
+			authToken?: string;
 	  }
 	| {
 			type: "update";
@@ -21,6 +22,16 @@ export type Message =
 			content: string;
 			user: string;
 			role: ChatRole;
+			authToken?: string;
+	  }
+	| {
+			type: "delete";
+			id: string;
+			authToken?: string;
+	  }
+	| {
+			type: "clear";
+			authToken?: string;
 	  }
 	| {
 			type: "all";
