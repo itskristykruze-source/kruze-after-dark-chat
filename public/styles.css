@@ -291,3 +291,236 @@ body {
 		font-size: 8px;
 	}
 }
+
+
+/* Viewer identity + host badge */
+.chat-app {
+	height: 100%;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	position: relative;
+}
+
+.message-list {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	padding-right: 2px;
+	scrollbar-width: thin;
+	scrollbar-color: rgba(214, 31, 60, 0.55) transparent;
+}
+
+.empty-chat {
+	margin: auto;
+	padding: 26px 18px;
+	max-width: 320px;
+	text-align: center;
+	color: #847e84;
+	font-size: 12px;
+	letter-spacing: 0.03em;
+	line-height: 1.6;
+}
+
+.empty-chat span {
+	display: block;
+	margin-bottom: 5px;
+	color: #cfcbd0;
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: 18px;
+}
+
+.identity-strip {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	margin-bottom: 7px;
+	padding: 0 2px;
+	color: #8e878e;
+	font-size: 10px;
+	letter-spacing: 0.03em;
+}
+
+.identity-strip strong {
+	color: #e7e3e6;
+	font-weight: 700;
+}
+
+.change-name {
+	width: auto;
+	height: auto;
+	margin: 0;
+	padding: 2px 0;
+	border: 0;
+	background: transparent;
+	color: var(--kk-red-bright);
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.composer-row {
+	display: flex;
+	gap: 8px;
+	align-items: stretch;
+	width: 100%;
+}
+
+.host-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: 6px;
+	padding: 2px 6px;
+	border: 1px solid rgba(255, 54, 87, 0.48);
+	border-radius: 999px;
+	background: linear-gradient(135deg, rgba(255, 54, 87, 0.24), rgba(120, 8, 29, 0.38));
+	color: #ff98aa;
+	font-size: 8px;
+	font-weight: 900;
+	letter-spacing: 0.11em;
+	line-height: 1.25;
+	vertical-align: middle;
+}
+
+.identity-host {
+	margin-left: 5px;
+}
+
+.host-message .user {
+	color: #fff;
+}
+
+.host-message .ten.columns {
+	border-color: rgba(255, 54, 87, 0.36);
+	background:
+		linear-gradient(180deg, rgba(92, 12, 28, 0.36), rgba(22, 14, 18, 0.92));
+	box-shadow:
+		inset 3px 0 0 rgba(255, 54, 87, 0.72),
+		0 8px 22px rgba(0, 0, 0, 0.2);
+}
+
+.name-gate {
+	position: absolute;
+	inset: 0;
+	z-index: 20;
+	display: grid;
+	place-items: center;
+	padding: 18px;
+	background:
+		radial-gradient(circle at 50% 28%, rgba(214, 31, 60, 0.24), transparent 35%),
+		rgba(5, 5, 8, 0.96);
+	backdrop-filter: blur(10px);
+}
+
+.name-card {
+	width: min(390px, 100%);
+	padding: 24px 22px 21px;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 20px;
+	background:
+		linear-gradient(180deg, rgba(24, 24, 31, 0.98), rgba(10, 10, 14, 0.98));
+	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+	text-align: center;
+}
+
+.name-kicker {
+	margin-bottom: 8px;
+	color: #ff7a91;
+	font-size: 9px;
+	font-weight: 900;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+}
+
+.name-card h2 {
+	margin: 0;
+	color: #fff;
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: 25px;
+	font-weight: 600;
+}
+
+.name-card p {
+	margin: 8px 0 17px;
+	color: #aaa3a7;
+	font-size: 12px;
+	line-height: 1.55;
+}
+
+.name-card input {
+	width: 100%;
+	height: 45px;
+	margin: 0;
+	padding: 0 13px;
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	border-radius: 10px;
+	background: #0c0c11;
+	color: #fff;
+	font-size: 14px;
+	outline: none;
+}
+
+.name-card input:focus {
+	border-color: var(--kk-red-bright);
+	box-shadow: 0 0 0 3px rgba(214, 31, 60, 0.17);
+}
+
+.name-error {
+	margin: 8px 0 -2px;
+	color: #ff8ca0;
+	font-size: 11px;
+}
+
+.name-join-button {
+	width: 100%;
+	height: 44px;
+	margin: 12px 0 0;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 10px;
+	background: linear-gradient(135deg, var(--kk-red-bright), #9b1028);
+	color: #fff;
+	font-size: 11px;
+	font-weight: 900;
+	letter-spacing: 0.11em;
+	text-transform: uppercase;
+	cursor: pointer;
+	box-shadow: 0 10px 24px rgba(214, 31, 60, 0.24);
+}
+
+.name-note {
+	margin-top: 10px;
+	color: #716b72;
+	font-size: 9px;
+	letter-spacing: 0.02em;
+}
+
+.send-message.two.columns:disabled,
+.my-input-text.ten.columns:disabled {
+	opacity: 0.46;
+	cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+	.name-card {
+		padding: 21px 17px 18px;
+		border-radius: 17px;
+	}
+
+	.name-card h2 {
+		font-size: 22px;
+	}
+
+	.identity-strip {
+		font-size: 9px;
+	}
+
+	.host-badge {
+		font-size: 7px;
+		padding: 2px 5px;
+	}
+}
