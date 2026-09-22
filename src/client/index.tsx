@@ -10,10 +10,16 @@ import {
 } from "react-router";
 import { nanoid } from "nanoid";
 
-import { type ChatMessage, type Message } from "../shared";
+import {
+	type BanEntry,
+	type ChatMessage,
+	type ChatRole,
+	type Message,
+} from "../shared";
 
 const CHAT_NAME_KEY = "kkChatName";
-const HOST_TOKEN = "KKHOST-7pQ4xN9mR2vL6sT8";
+const VIEWER_ID_KEY = "kkViewerId";
+
 const RESERVED_NAMES = [
 	"kristy",
 	"kristy kruze",
@@ -29,19 +35,56 @@ function normalizeName(value: string) {
 	return value.replace(/\s+/g, " ").trim();
 }
 
+function getViewerId() {
+	try {
+		const saved = localStorage.getItem(VIEWER_ID_KEY);
+		if (saved) return saved;
+
+		const created = `viewer-${nanoid(18)}`;
+		localStorage.setItem(VIEWER_ID_KEY, created);
+		return created;
+	} catch {
+		return `viewer-${nanoid(18)}`;
+	}
+}
+
 function App() {
 	const { room } = useParams();
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
+	const [bans, setBans] = useState<BanEntry[]>([]);
+	const [showBans, setShowBans] = useState(false);
 	const [nameError, setNameError] = useState("");
+	const [accessRole, setAccessRole] = useState<ChatRole>("user");
+	const [moderationState, setModerationState] = useState<
+		"kicked" | "banned" | null
+	>(null);
+	const [socketEnabled, setSocketEnabled] = useState(true);
 	const scrollRef = useRef<HTMLDivElement>(null);
 
-	const isHost = useMemo(() => {
+	const access = useMemo(() => {
 		const params = new URLSearchParams(window.location.search);
-		return params.get("host") === HOST_TOKEN;
+		return {
+			hostToken: params.get("host") || "",
+			modToken: params.get("mod") || "",
+		};
 	}, []);
 
+	const requestedHost = Boolean(access.hostToken);
+	const requestedMod = !requestedHost && Boolean(access.modToken);
+	const hasPrivateAccessLink = requestedHost || requestedMod;
+
+	const viewerId = useMemo(() => getViewerId(), []);
+
+	const connectionQuery = useMemo(() => {
+		const query: Record<string, string> = { viewer: viewerId };
+		if (access.hostToken) query.host = access.hostToken;
+		if (access.modToken) query.mod = access.modToken;
+		return query;
+	}, [access.hostToken, access.modToken, viewerId]);
+
 	const [name, setName] = useState(() => {
-		if (isHost) return "Kristy Kruze";
+		if (requestedHost) return "Kristy Kruze";
+		if (requestedMod) return "Moderator";
 		return normalizeName(localStorage.getItem(CHAT_NAME_KEY) || "");
 	});
 	const [nameDraft, setNameDraft] = useState(name);
@@ -49,8 +92,37 @@ function App() {
 	const socket = usePartySocket({
 		party: "chat",
 		room,
+		query: connectionQuery,
+		enabled: socketEnabled,
 		onMessage: (evt) => {
 			const message = JSON.parse(evt.data as string) as Message;
+
+			if (message.type === "auth") {
+				setAccessRole(message.role);
+				if (message.bans) setBans(message.bans);
+
+				const invalidPrivateLink =
+					(requestedHost && message.role !== "host") ||
+					(requestedMod && message.role !== "mod");
+
+				if (invalidPrivateLink) {
+					setName("");
+					setNameDraft("");
+					setNameError("That private access link is invalid.");
+				}
+				return;
+			}
+
+			if (message.type === "bans") {
+				setBans(message.bans);
+				return;
+			}
+
+			if (message.type === "moderation") {
+				setModerationState(message.action);
+				setSocketEnabled(false);
+				return;
+			}
 
 			if (message.type === "all") {
 				setMessages(message.messages);
@@ -58,7 +130,9 @@ function App() {
 			}
 
 			if (message.type === "delete") {
-				setMessages((current) => current.filter((m) => m.id !== message.id));
+				setMessages((current) =>
+					current.filter((item) => item.id !== message.id),
+				);
 				return;
 			}
 
@@ -75,6 +149,8 @@ function App() {
 						content: message.content,
 						user: message.user,
 						role: message.role,
+						viewerId:
+							"viewerId" in message ? message.viewerId : undefined,
 					};
 
 					if (foundIndex === -1) return [...current, nextMessage];
@@ -87,20 +163,36 @@ function App() {
 				return;
 			}
 
-			setMessages((current) =>
-				current.map((m) =>
-					m.id === message.id
-						? {
-								id: message.id,
-								content: message.content,
-								user: message.user,
-								role: message.role,
-							}
-						: m,
-				),
-			);
+			if (message.type === "update") {
+				setMessages((current) =>
+					current.map((m) =>
+						m.id === message.id
+							? {
+									id: message.id,
+									content: message.content,
+									user: message.user,
+									role: message.role,
+									viewerId:
+										"viewerId" in message ? message.viewerId : m.viewerId,
+								}
+							: m,
+					),
+				);
+			}
+		},
+		onClose: (evt) => {
+			if (evt.code === 4003) {
+				setModerationState("kicked");
+				setSocketEnabled(false);
+			}
+			if (evt.code === 4004) {
+				setModerationState("banned");
+				setSocketEnabled(false);
+			}
 		},
 	});
+
+	const canModerate = accessRole === "host" || accessRole === "mod";
 
 	useEffect(() => {
 		const el = scrollRef.current;
@@ -132,16 +224,52 @@ function App() {
 	}
 
 	function changeName() {
-		if (isHost) return;
+		if (canModerate) return;
 		setNameDraft(name);
 		setName("");
 		setNameError("");
 	}
 
+	function sendModeration(type: "kick" | "ban" | "unban", targetViewerId: string) {
+		socket.send(
+			JSON.stringify({
+				type,
+				viewerId: targetViewerId,
+			} satisfies Message),
+		);
+	}
+
 	return (
 		<div className="chat-app">
-			{!name && !isHost && (
-				<div className="name-gate" role="dialog" aria-modal="true" aria-label="Choose a chat name">
+			{moderationState && (
+				<div
+					className="name-gate moderation-gate"
+					role="dialog"
+					aria-modal="true"
+				>
+					<div className="name-card">
+						<div className="name-kicker">Kruze After Dark</div>
+						<h2>
+							{moderationState === "banned"
+								? "Chat access blocked"
+								: "Removed from chat"}
+						</h2>
+						<p>
+							{moderationState === "banned"
+								? "This browser has been banned from participating in this live chat."
+								: "A moderator removed you from this chat session. Refresh the page to try joining again."}
+						</p>
+					</div>
+				</div>
+			)}
+
+			{!name && (!hasPrivateAccessLink || accessRole === "user") && !moderationState && (
+				<div
+					className="name-gate"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Choose a chat name"
+				>
 					<form className="name-card" onSubmit={saveViewerName}>
 						<div className="name-kicker">Kruze After Dark</div>
 						<h2>Choose your chat name</h2>
@@ -159,8 +287,12 @@ function App() {
 							autoComplete="nickname"
 						/>
 						{nameError && <div className="name-error">{nameError}</div>}
-						<button type="submit" className="name-join-button">Join Live Chat</button>
-						<div className="name-note">Your chat name is remembered on this device.</div>
+						<button type="submit" className="name-join-button">
+							Join Live Chat
+						</button>
+						<div className="name-note">
+							Your chat name is remembered on this device.
+						</div>
 					</form>
 				</div>
 			)}
@@ -177,43 +309,114 @@ function App() {
 					{messages.map((message) => (
 						<div
 							key={message.id}
-							className={`row message ${message.role === "host" ? "host-message" : ""}`}
+							className={`row message ${message.role === "host" ? "host-message" : ""} ${message.role === "mod" ? "mod-message" : ""}`}
 						>
 							<div className="two columns user">
 								<span>{message.user}</span>
-								{message.role === "host" && <b className="host-badge">HOST</b>}
+								{message.role === "host" && (
+									<b className="host-badge">HOST</b>
+								)}
+								{message.role === "mod" && (
+									<b className="mod-badge">MOD</b>
+								)}
 							</div>
+
 							<div className="ten columns message-body">
 								<span>{message.content}</span>
-								{isHost && (
-									<button
-										type="button"
-										className="delete-message"
-										aria-label="Delete message"
-										title="Delete message"
-										onClick={() => {
-											socket.send(
-												JSON.stringify({
-													type: "delete",
-													id: message.id,
-													authToken: HOST_TOKEN,
-												} satisfies Message),
-											);
-										}}
-									>
-										×
-									</button>
+
+								{canModerate && (
+									<div className="moderation-buttons">
+										<button
+											type="button"
+											className="mod-action delete-action"
+											title="Delete message"
+											onClick={() =>
+												socket.send(
+													JSON.stringify({
+														type: "delete",
+														id: message.id,
+													} satisfies Message),
+												)
+											}
+										>
+											Delete
+										</button>
+
+										{message.role === "user" && message.viewerId && (
+											<>
+												<button
+													type="button"
+													className="mod-action"
+													title="Remove viewer from this chat session"
+													onClick={() => {
+														if (
+															window.confirm(
+																`Kick ${message.user} from this chat session?`,
+															)
+														) {
+															sendModeration("kick", message.viewerId!);
+														}
+													}}
+												>
+													Kick
+												</button>
+
+												<button
+													type="button"
+													className="mod-action ban-action"
+													title="Ban viewer from chat"
+													onClick={() => {
+														if (
+															window.confirm(
+																`Ban ${message.user} from live chat?`,
+															)
+														) {
+															sendModeration("ban", message.viewerId!);
+														}
+													}}
+												>
+													Ban
+												</button>
+											</>
+										)}
+									</div>
 								)}
 							</div>
 						</div>
 					))}
 				</div>
 
+				{canModerate && showBans && (
+					<div className="ban-panel">
+						<div className="ban-panel-title">
+							<span>Banned viewers</span>
+							<button type="button" onClick={() => setShowBans(false)}>
+								Close
+							</button>
+						</div>
+						{bans.length === 0 ? (
+							<div className="ban-empty">No viewers are currently banned.</div>
+						) : (
+							bans.map((entry) => (
+								<div className="ban-row" key={entry.viewerId}>
+									<span>{entry.user}</span>
+									<button
+										type="button"
+										onClick={() => sendModeration("unban", entry.viewerId)}
+									>
+										Unban
+									</button>
+								</div>
+							))
+						)}
+					</div>
+				)}
+
 				<form
 					className="row"
 					onSubmit={(e) => {
 						e.preventDefault();
-						if (!name) return;
+						if (!name || moderationState) return;
 
 						const content = e.currentTarget.elements.namedItem(
 							"content",
@@ -225,15 +428,18 @@ function App() {
 							id: nanoid(8),
 							content: trimmedContent,
 							user: name,
-							role: isHost ? "host" : "user",
+							role: accessRole,
 						};
 
 						setMessages((current) => [...current, chatMessage]);
+
 						socket.send(
 							JSON.stringify({
 								type: "add",
-								...chatMessage,
-								authToken: isHost ? HOST_TOKEN : undefined,
+								id: chatMessage.id,
+								content: chatMessage.content,
+								user: chatMessage.user,
+								role: chatMessage.role,
 							} satisfies Message),
 						);
 
@@ -243,31 +449,58 @@ function App() {
 					<div className="identity-strip">
 						<span>
 							Chatting as <strong>{name || "Guest"}</strong>
-							{isHost && <b className="host-badge identity-host">HOST</b>}
+							{accessRole === "host" && (
+								<b className="host-badge identity-host">HOST</b>
+							)}
+							{accessRole === "mod" && (
+								<b className="mod-badge identity-host">MOD</b>
+							)}
 						</span>
-						{isHost ? (
-							<button
-								type="button"
-								className="clear-chat"
-								onClick={() => {
-									if (!window.confirm("Clear every message from this live chat?")) return;
-									socket.send(
-										JSON.stringify({
-											type: "clear",
-											authToken: HOST_TOKEN,
-										} satisfies Message),
-									);
-								}}
-							>
-								Clear chat
-							</button>
-						) : (
-							name && (
-								<button type="button" className="change-name" onClick={changeName}>
-									Change
+
+						<div className="identity-actions">
+							{canModerate && (
+								<button
+									type="button"
+									className="bans-button"
+									onClick={() => setShowBans((current) => !current)}
+								>
+									Bans {bans.length > 0 ? `(${bans.length})` : ""}
 								</button>
-							)
-						)}
+							)}
+
+							{accessRole === "host" ? (
+								<button
+									type="button"
+									className="clear-chat"
+									onClick={() => {
+										if (
+											!window.confirm(
+												"Clear every message from this live chat?",
+											)
+										)
+											return;
+										socket.send(
+											JSON.stringify({
+												type: "clear",
+											} satisfies Message),
+										);
+									}}
+								>
+									Clear chat
+								</button>
+							) : (
+								!canModerate &&
+								name && (
+									<button
+										type="button"
+										className="change-name"
+										onClick={changeName}
+									>
+										Change
+									</button>
+								)
+							)}
+						</div>
 					</div>
 
 					<div className="composer-row">
@@ -275,15 +508,17 @@ function App() {
 							type="text"
 							name="content"
 							className="ten columns my-input-text"
-							placeholder={name ? `Message as ${name}...` : "Choose a name to chat"}
+							placeholder={
+								name ? `Message as ${name}...` : "Choose a name to chat"
+							}
 							autoComplete="off"
 							maxLength={500}
-							disabled={!name}
+							disabled={!name || Boolean(moderationState)}
 						/>
 						<button
 							type="submit"
 							className="send-message two columns"
-							disabled={!name}
+							disabled={!name || Boolean(moderationState)}
 						>
 							Send
 						</button>
