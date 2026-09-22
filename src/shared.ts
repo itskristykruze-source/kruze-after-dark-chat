@@ -20,6 +20,7 @@ export type Message =
 			content: string;
 			user: string;
 			role: ChatRole;
+			viewerId?: string;
 	  }
 	| {
 			type: "update";
@@ -27,6 +28,7 @@ export type Message =
 			content: string;
 			user: string;
 			role: ChatRole;
+			viewerId?: string;
 	  }
 	| {
 			type: "delete";
