@@ -524,3 +524,68 @@ body {
 		padding: 2px 5px;
 	}
 }
+
+
+/* Host moderation controls */
+.message-body {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+}
+
+.message-body > span {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.delete-message {
+	flex: 0 0 auto;
+	width: 22px;
+	height: 22px;
+	margin: -3px -3px 0 0;
+	padding: 0;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.045);
+	color: #8e878e;
+	font-size: 15px;
+	line-height: 19px;
+	cursor: pointer;
+	opacity: 0.65;
+	transition: 0.16s ease;
+}
+
+.delete-message:hover {
+	border-color: rgba(255, 54, 87, 0.48);
+	background: rgba(214, 31, 60, 0.14);
+	color: #ff8ca0;
+	opacity: 1;
+}
+
+.clear-chat {
+	width: auto;
+	height: auto;
+	margin: 0;
+	padding: 2px 0;
+	border: 0;
+	background: transparent;
+	color: #ff7a91;
+	font-size: 9px;
+	font-weight: 900;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.clear-chat:hover {
+	color: #fff;
+}
+
+@media (max-width: 520px) {
+	.delete-message {
+		width: 24px;
+		height: 24px;
+		font-size: 16px;
+	}
+}
