@@ -25,7 +25,6 @@ function App() {
 			if (message.type === "add") {
 				const foundIndex = messages.findIndex((m) => m.id === message.id);
 				if (foundIndex === -1) {
-					// probably someone else who added a message
 					setMessages((messages) => [
 						...messages,
 						{
@@ -36,9 +35,6 @@ function App() {
 						},
 					]);
 				} else {
-					// this usually means we ourselves added a message
-					// and it was broadcasted back
-					// so let's replace the message with the new message
 					setMessages((messages) => {
 						return messages
 							.slice(0, foundIndex)
@@ -85,14 +81,16 @@ function App() {
 					const content = e.currentTarget.elements.namedItem(
 						"content",
 					) as HTMLInputElement;
+					const trimmedContent = content.value.trim();
+					if (!trimmedContent) return;
+
 					const chatMessage: ChatMessage = {
 						id: nanoid(8),
-						content: content.value,
+						content: trimmedContent,
 						user: name,
 						role: "user",
 					};
 					setMessages((messages) => [...messages, chatMessage]);
-					// we could broadcast the message here
 
 					socket.send(
 						JSON.stringify({
@@ -108,8 +106,9 @@ function App() {
 					type="text"
 					name="content"
 					className="ten columns my-input-text"
-					placeholder={`Hello ${name}! Type a message...`}
+					placeholder={`Message as ${name}...`}
 					autoComplete="off"
+					maxLength={500}
 				/>
 				<button type="submit" className="send-message two columns">
 					Send
