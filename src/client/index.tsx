@@ -58,7 +58,6 @@ function App() {
 	const [moderationState, setModerationState] = useState<
 		"kicked" | "banned" | null
 	>(null);
-	const [socketEnabled, setSocketEnabled] = useState(true);
 	const scrollRef = useRef<HTMLDivElement>(null);
 
 	const access = useMemo(() => {
@@ -93,7 +92,6 @@ function App() {
 		party: "chat",
 		room,
 		query: connectionQuery,
-		enabled: socketEnabled,
 		onMessage: (evt) => {
 			const message = JSON.parse(evt.data as string) as Message;
 
@@ -120,7 +118,7 @@ function App() {
 
 			if (message.type === "moderation") {
 				setModerationState(message.action);
-				setSocketEnabled(false);
+				socket.close(4000, "Moderated");
 				return;
 			}
 
@@ -183,11 +181,11 @@ function App() {
 		onClose: (evt) => {
 			if (evt.code === 4003) {
 				setModerationState("kicked");
-				setSocketEnabled(false);
+				setTimeout(() => socket.close(), 0);
 			}
 			if (evt.code === 4004) {
 				setModerationState("banned");
-				setSocketEnabled(false);
+				setTimeout(() => socket.close(), 0);
 			}
 		},
 	});
