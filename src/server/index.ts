@@ -7,6 +7,26 @@ import {
 
 import type { ChatMessage, Message } from "../shared";
 
+const HOST_TOKEN = "KKHOST-7pQ4xN9mR2vL6sT8";
+const RESERVED_NAMES = new Set([
+	"kristy",
+	"kristy kruze",
+	"@itskristykruze",
+	"host",
+	"admin",
+	"administrator",
+	"mod",
+	"moderator",
+]);
+
+function cleanName(value: string) {
+	return value.replace(/\s+/g, " ").trim().slice(0, 24);
+}
+
+function cleanContent(value: string) {
+	return value.trim().slice(0, 500);
+}
+
 export class Chat extends Server<Env> {
 	static options = { hibernate: true };
 
@@ -17,15 +37,10 @@ export class Chat extends Server<Env> {
 	}
 
 	onStart() {
-		// this is where you can initialize things that need to be done before the server starts
-		// for example, load previous messages from a database or a service
-
-		// create the messages table if it doesn't exist
 		this.ctx.storage.sql.exec(
 			`CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, user TEXT, role TEXT, content TEXT)`,
 		);
 
-		// load the messages from the database
 		this.messages = this.ctx.storage.sql
 			.exec(`SELECT * FROM messages`)
 			.toArray() as ChatMessage[];
@@ -41,39 +56,84 @@ export class Chat extends Server<Env> {
 	}
 
 	saveMessage(message: ChatMessage) {
-		// check if the message already exists
 		const existingMessage = this.messages.find((m) => m.id === message.id);
 		if (existingMessage) {
-			this.messages = this.messages.map((m) => {
-				if (m.id === message.id) {
-					return message;
-				}
-				return m;
-			});
+			this.messages = this.messages.map((m) =>
+				m.id === message.id ? message : m,
+			);
 		} else {
 			this.messages.push(message);
 		}
 
-		// Use parameterized queries to prevent SQL injection
 		this.ctx.storage.sql.exec(
 			`INSERT INTO messages (id, user, role, content) VALUES (?, ?, ?, ?)
-			 ON CONFLICT (id) DO UPDATE SET content = ?`,
+			 ON CONFLICT (id) DO UPDATE SET user = ?, role = ?, content = ?`,
 			message.id,
 			message.user,
 			message.role,
 			message.content,
+			message.user,
+			message.role,
 			message.content,
 		);
 	}
 
-	onMessage(connection: Connection, message: WSMessage) {
-		// let's broadcast the raw message to everyone else
-		this.broadcast(message);
+	deleteMessage(id: string) {
+		this.messages = this.messages.filter((message) => message.id !== id);
+		this.ctx.storage.sql.exec(`DELETE FROM messages WHERE id = ?`, id);
+	}
 
-		// let's update our local messages store
-		const parsed = JSON.parse(message as string) as Message;
+	clearMessages() {
+		this.messages = [];
+		this.ctx.storage.sql.exec(`DELETE FROM messages`);
+	}
+
+	onMessage(_connection: Connection, raw: WSMessage) {
+		let parsed: Message;
+
+		try {
+			parsed = JSON.parse(raw as string) as Message;
+		} catch {
+			return;
+		}
+
+		const isHost = "authToken" in parsed && parsed.authToken === HOST_TOKEN;
+
 		if (parsed.type === "add" || parsed.type === "update") {
-			this.saveMessage(parsed);
+			const content = cleanContent(parsed.content);
+			if (!content) return;
+
+			const role = isHost ? "host" : "user";
+			const user = role === "host" ? "Kristy Kruze" : cleanName(parsed.user);
+			if (!user || user.length < 3) return;
+			if (role !== "host" && RESERVED_NAMES.has(user.toLowerCase())) return;
+
+			const message: ChatMessage = {
+				id: parsed.id,
+				content,
+				user,
+				role,
+			};
+
+			this.saveMessage(message);
+			this.broadcastMessage({
+				type: parsed.type,
+				...message,
+			});
+			return;
+		}
+
+		if (parsed.type === "delete") {
+			if (!isHost) return;
+			this.deleteMessage(parsed.id);
+			this.broadcastMessage({ type: "delete", id: parsed.id });
+			return;
+		}
+
+		if (parsed.type === "clear") {
+			if (!isHost) return;
+			this.clearMessages();
+			this.broadcastMessage({ type: "clear" });
 		}
 	}
 }
