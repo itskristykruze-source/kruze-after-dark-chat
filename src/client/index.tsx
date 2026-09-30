@@ -191,6 +191,16 @@ function App() {
 	});
 
 	const canModerate = accessRole === "host" || accessRole === "mod";
+	const isHostDashboard = accessRole === "host";
+	const peopleWhoChatted = useMemo(
+		() =>
+			new Set(
+				messages
+					.filter((message) => message.role === "user")
+					.map((message) => message.viewerId || message.user),
+			).size,
+		[messages],
+	);
 
 	useEffect(() => {
 		const el = scrollRef.current;
@@ -238,7 +248,7 @@ function App() {
 	}
 
 	return (
-		<div className="chat-app">
+		<div className={`chat-app ${isHostDashboard ? "host-dashboard" : ""}`}>
 			{moderationState && (
 				<div
 					className="name-gate moderation-gate"
@@ -293,6 +303,19 @@ function App() {
 						</div>
 					</form>
 				</div>
+			)}
+
+			{isHostDashboard && (
+				<header className="host-dashboard-header">
+					<div>
+						<div className="host-dashboard-kicker">Private Host Control Room</div>
+						<h1>Kristy Kruze Dashboard</h1>
+					</div>
+					<div className="host-connection-pill">
+						<span className="host-connection-dot" />
+						HOST CONNECTED
+					</div>
+				</header>
 			)}
 
 			<div className="chat container">
@@ -383,6 +406,89 @@ function App() {
 						</div>
 					))}
 				</div>
+
+				{isHostDashboard && (
+					<aside className="host-control-panel">
+						<section className="host-control-card">
+							<div className="host-control-label">Tonight's Show</div>
+							<h2>Kruze After Dark</h2>
+							<p>Thursdays · 9:30 PM CT</p>
+							<div className="host-control-status">
+								<span className="host-control-status-dot" />
+								Chat controls online
+							</div>
+						</section>
+
+						<section className="host-control-card">
+							<div className="host-control-label">Chat Snapshot</div>
+							<div className="host-stats-grid">
+								<div><strong>{messages.length}</strong><span>Messages</span></div>
+								<div><strong>{peopleWhoChatted}</strong><span>People chatted</span></div>
+								<div><strong>{bans.length}</strong><span>Banned</span></div>
+							</div>
+						</section>
+
+						<section className="host-control-card">
+							<div className="host-control-label">Quick Controls</div>
+							<a
+								className="host-dashboard-button primary"
+								href="https://itskristykruze.com/live"
+								target="_blank"
+								rel="noreferrer"
+							>
+								Open Public Live Page
+							</a>
+							<button
+								type="button"
+								className="host-dashboard-button"
+								onClick={() => setShowBans((current) => !current)}
+							>
+								{showBans ? "Hide Bans" : `Manage Bans${bans.length ? ` (${bans.length})` : ""}`}
+							</button>
+							<button
+								type="button"
+								className="host-dashboard-button danger"
+								onClick={() => {
+									if (!window.confirm("Clear every message from this live chat?")) return;
+									socket.send(JSON.stringify({ type: "clear" } satisfies Message));
+								}}
+							>
+								Clear Entire Chat
+							</button>
+						</section>
+
+						{showBans && (
+							<section className="host-control-card host-bans-card">
+								<div className="host-control-label">Banned Viewers</div>
+								{bans.length === 0 ? (
+									<p className="host-control-muted">Nobody is currently banned.</p>
+								) : (
+									bans.map((entry) => (
+										<div className="host-ban-row" key={entry.viewerId}>
+											<span>{entry.user}</span>
+											<button
+												type="button"
+												onClick={() => sendModeration("unban", entry.viewerId)}
+											>
+												Unban
+											</button>
+										</div>
+									))
+								)}
+							</section>
+						)}
+
+						<section className="host-control-card">
+							<div className="host-control-label">Show Flow</div>
+							<ol className="host-show-flow">
+								<li>STARTING SOON</li>
+								<li>KRUZE AFTER DARK</li>
+								<li>BE RIGHT BACK if needed</li>
+								<li>THANKS FOR WATCHING</li>
+							</ol>
+						</section>
+					</aside>
+				)}
 
 				{canModerate && showBans && (
 					<div className="ban-panel">
