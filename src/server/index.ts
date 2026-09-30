@@ -6,7 +6,15 @@ import {
 	routePartykitRequest,
 } from "partyserver";
 
-import type { BanEntry, ChatMessage, ChatRole, Message } from "../shared";
+import type {
+	BanEntry,
+	ChatMessage,
+	ChatRole,
+	GameType,
+	Message,
+	PollChoice,
+	PollState,
+} from "../shared";
 
 const HOST_TOKEN_HASH =
 	"da5dea35683c0df169f94452804ae1a86cd1a256cb181f60958eeee020535b9b";
@@ -59,6 +67,7 @@ export class Chat extends Server<Env> {
 
 	messages = [] as ChatMessage[];
 	bans = [] as BanEntry[];
+	poll = null as PollState | null;
 
 	broadcastMessage(message: Message, exclude?: string[]) {
 		this.broadcast(JSON.stringify(message), exclude);
@@ -106,6 +115,49 @@ export class Chat extends Server<Env> {
 				 ORDER BY created_at DESC`,
 			)
 			.toArray() as BanEntry[];
+
+		this.ctx.storage.sql.exec(
+			`CREATE TABLE IF NOT EXISTS poll_state (
+				id INTEGER PRIMARY KEY CHECK (id = 1),
+				poll_id TEXT,
+				game_type TEXT,
+				prompt TEXT,
+				option_a TEXT,
+				option_b TEXT,
+				status TEXT,
+				ends_at INTEGER
+			)`,
+		);
+
+		this.ctx.storage.sql.exec(
+			`CREATE TABLE IF NOT EXISTS poll_votes (
+				poll_id TEXT,
+				viewer_id TEXT,
+				choice TEXT,
+				PRIMARY KEY (poll_id, viewer_id)
+			)`,
+		);
+
+		const pollRows = this.ctx.storage.sql
+			.exec(
+				`SELECT poll_id AS id, game_type AS gameType, prompt,
+					option_a AS optionA, option_b AS optionB, status, ends_at AS endsAt
+				 FROM poll_state WHERE id = 1`,
+			)
+			.toArray() as Array<{
+				id: string;
+				gameType: GameType;
+				prompt: string;
+				optionA: string;
+				optionB: string;
+				status: "open" | "closed";
+				endsAt: number;
+			}>;
+
+		if (pollRows[0]) {
+			const counts = this.getPollCounts(pollRows[0].id);
+			this.poll = { ...pollRows[0], ...counts };
+		}
 	}
 
 	async onConnect(connection: Connection, ctx: ConnectionContext) {
@@ -140,6 +192,7 @@ export class Chat extends Server<Env> {
 				type: "auth",
 				role,
 				bans: role === "host" || role === "mod" ? this.bans : undefined,
+				poll: this.getPollForViewer(viewerId),
 			} satisfies Message),
 		);
 
@@ -203,6 +256,97 @@ export class Chat extends Server<Env> {
 				connection.send(payload);
 			}
 		}
+	}
+
+	getPollCounts(pollId: string) {
+		const rows = this.ctx.storage.sql
+			.exec(
+				`SELECT
+					SUM(CASE WHEN choice = 'a' THEN 1 ELSE 0 END) AS votesA,
+					SUM(CASE WHEN choice = 'b' THEN 1 ELSE 0 END) AS votesB
+				 FROM poll_votes WHERE poll_id = ?`,
+				pollId,
+			)
+			.toArray() as Array<{ votesA: number | null; votesB: number | null }>;
+
+		return {
+			votesA: Number(rows[0]?.votesA || 0),
+			votesB: Number(rows[0]?.votesB || 0),
+		};
+	}
+
+	getPollForViewer(viewerId?: string): PollState | null {
+		if (!this.poll) return null;
+
+		let myVote: PollChoice | undefined;
+		if (viewerId) {
+			const rows = this.ctx.storage.sql
+				.exec(
+					`SELECT choice FROM poll_votes WHERE poll_id = ? AND viewer_id = ?`,
+					this.poll.id,
+					viewerId,
+				)
+				.toArray() as Array<{ choice: PollChoice }>;
+			myVote = rows[0]?.choice;
+		}
+
+		return { ...this.poll, myVote };
+	}
+
+	broadcastPollState() {
+		for (const connection of this.getConnections()) {
+			const state = connection.state as ChatConnectionState | null;
+			connection.send(
+				JSON.stringify({
+					type: "poll_state",
+					poll: this.getPollForViewer(state?.viewerId),
+				} satisfies Message),
+			);
+		}
+	}
+
+	startPoll(poll: Omit<PollState, "votesA" | "votesB" | "myVote">) {
+		this.ctx.storage.sql.exec(
+			`INSERT INTO poll_state
+				(id, poll_id, game_type, prompt, option_a, option_b, status, ends_at)
+			 VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT (id) DO UPDATE SET
+				poll_id = ?, game_type = ?, prompt = ?, option_a = ?,
+				option_b = ?, status = ?, ends_at = ?`,
+			poll.id,
+			poll.gameType,
+			poll.prompt,
+			poll.optionA,
+			poll.optionB,
+			poll.status,
+			poll.endsAt,
+			poll.id,
+			poll.gameType,
+			poll.prompt,
+			poll.optionA,
+			poll.optionB,
+			poll.status,
+			poll.endsAt,
+		);
+		this.ctx.storage.sql.exec(`DELETE FROM poll_votes WHERE poll_id != ?`, poll.id);
+		this.poll = { ...poll, votesA: 0, votesB: 0 };
+		this.broadcastPollState();
+	}
+
+	endPoll() {
+		if (!this.poll) return;
+		this.poll = { ...this.poll, status: "closed" };
+		this.ctx.storage.sql.exec(
+			`UPDATE poll_state SET status = 'closed' WHERE id = 1`,
+		);
+		this.broadcastPollState();
+	}
+
+	clearPoll() {
+		this.poll = null;
+		this.ctx.storage.sql.exec(`DELETE FROM poll_state WHERE id = 1`);
+		this.ctx.storage.sql.exec(`DELETE FROM poll_votes`);
+		this.broadcastPollState();
 	}
 
 	removeViewer(viewerId: string, action: "kicked" | "banned") {
@@ -291,6 +435,75 @@ export class Chat extends Server<Env> {
 					target.send(modPayload);
 				}
 			}
+			return;
+		}
+
+		if (parsed.type === "poll_start") {
+			if (role !== "host") return;
+
+			const prompt = cleanContent(parsed.poll.prompt);
+			const optionA = cleanContent(parsed.poll.optionA);
+			const optionB = cleanContent(parsed.poll.optionB);
+			const allowedGames = new Set<GameType>([
+				"red-flag",
+				"would-you-rather",
+				"truth-or-temptation",
+				"kruze-court",
+				"custom",
+			]);
+
+			if (!prompt || !optionA || !optionB) return;
+			if (!allowedGames.has(parsed.poll.gameType)) return;
+
+			const endsAt = Math.min(
+				Math.max(Number(parsed.poll.endsAt) || Date.now() + 30_000, Date.now() + 10_000),
+				Date.now() + 180_000,
+			);
+
+			this.startPoll({
+				id: cleanViewerId(parsed.poll.id) || crypto.randomUUID(),
+				gameType: parsed.poll.gameType,
+				prompt,
+				optionA,
+				optionB,
+				status: "open",
+				endsAt,
+			});
+			return;
+		}
+
+		if (parsed.type === "poll_vote") {
+			if (role !== "user" || !this.poll) return;
+			if (this.poll.id !== parsed.pollId || this.poll.status !== "open") return;
+			if (Date.now() >= this.poll.endsAt) {
+				this.endPoll();
+				return;
+			}
+			if (parsed.choice !== "a" && parsed.choice !== "b") return;
+
+			this.ctx.storage.sql.exec(
+				`INSERT INTO poll_votes (poll_id, viewer_id, choice)
+				 VALUES (?, ?, ?)
+				 ON CONFLICT (poll_id, viewer_id) DO UPDATE SET choice = ?`,
+				this.poll.id,
+				viewerId,
+				parsed.choice,
+				parsed.choice,
+			);
+			this.poll = { ...this.poll, ...this.getPollCounts(this.poll.id) };
+			this.broadcastPollState();
+			return;
+		}
+
+		if (parsed.type === "poll_end") {
+			if (role !== "host") return;
+			this.endPoll();
+			return;
+		}
+
+		if (parsed.type === "poll_clear") {
+			if (role !== "host") return;
+			this.clearPoll();
 			return;
 		}
 
