@@ -34,6 +34,129 @@ const RESERVED_NAMES = [
 	"moderator",
 ];
 
+type GamePreset = {
+	gameType: Exclude<GameType, "custom">;
+	label: string;
+	prompt: string;
+	optionA: string;
+	optionB: string;
+};
+
+const GAME_PRESETS: GamePreset[] = [
+	{
+		gameType: "red-flag",
+		label: "Phone Face Down",
+		prompt: "They always keep their phone face down around you. Red flag or no big deal?",
+		optionA: "RED FLAG",
+		optionB: "NO BIG DEAL",
+	},
+	{
+		gameType: "red-flag",
+		label: "Still Texting the Ex",
+		prompt: "They still text their ex every week but say they are just friends. Red flag or acceptable?",
+		optionA: "RED FLAG",
+		optionB: "ACCEPTABLE",
+	},
+	{
+		gameType: "red-flag",
+		label: "Never Posts You",
+		prompt: "You have been dating for months and they never acknowledge you online. Red flag or private relationship?",
+		optionA: "RED FLAG",
+		optionB: "JUST PRIVATE",
+	},
+	{
+		gameType: "red-flag",
+		label: "Flirty Friend",
+		prompt: "Their closest friend openly flirts with them and they laugh it off. Red flag or harmless?",
+		optionA: "RED FLAG",
+		optionB: "HARMLESS",
+	},
+	{
+		gameType: "would-you-rather",
+		label: "Date Night",
+		prompt: "Would you rather have a private date night together or a big VIP night out?",
+		optionA: "PRIVATE DATE",
+		optionB: "VIP NIGHT OUT",
+	},
+	{
+		gameType: "would-you-rather",
+		label: "Chemistry vs Stability",
+		prompt: "Would you rather choose intense chemistry or rock-solid stability?",
+		optionA: "CHEMISTRY",
+		optionB: "STABILITY",
+	},
+	{
+		gameType: "would-you-rather",
+		label: "First Move",
+		prompt: "Would you rather make the first move or have them make it?",
+		optionA: "MAKE THE MOVE",
+		optionB: "LET THEM LEAD",
+	},
+	{
+		gameType: "would-you-rather",
+		label: "Mystery vs Honesty",
+		prompt: "Would you rather date someone mysterious or someone who tells you everything?",
+		optionA: "MYSTERIOUS",
+		optionB: "OPEN BOOK",
+	},
+	{
+		gameType: "truth-or-temptation",
+		label: "First Impression",
+		prompt: "Your crush asks what first caught your attention. Do you tell the truth or keep it mysterious?",
+		optionA: "TELL THE TRUTH",
+		optionB: "KEEP IT MYSTERIOUS",
+	},
+	{
+		gameType: "truth-or-temptation",
+		label: "Secret Crush",
+		prompt: "Someone asks if you have ever had a crush on a friend. Answer honestly or dodge the question?",
+		optionA: "ANSWER",
+		optionB: "DODGE IT",
+	},
+	{
+		gameType: "truth-or-temptation",
+		label: "Bold Compliment",
+		prompt: "Do you give the person you like a bold compliment or make them guess how you feel?",
+		optionA: "SAY IT",
+		optionB: "MAKE THEM GUESS",
+	},
+	{
+		gameType: "truth-or-temptation",
+		label: "Text Them Now",
+		prompt: "You are thinking about someone right now. Send the text tonight or leave it alone?",
+		optionA: "SEND IT",
+		optionB: "LEAVE IT ALONE",
+	},
+	{
+		gameType: "kruze-court",
+		label: "Thirst Trap Likes",
+		prompt: "They constantly like attractive people's thirst-trap posts but call it harmless. Guilty or not guilty?",
+		optionA: "GUILTY",
+		optionB: "NOT GUILTY",
+	},
+	{
+		gameType: "kruze-court",
+		label: "Late-Night Reply",
+		prompt: "They reply to an ex after midnight and do not mention it. Guilty or not guilty?",
+		optionA: "GUILTY",
+		optionB: "NOT GUILTY",
+	},
+	{
+		gameType: "kruze-court",
+		label: "Location Off",
+		prompt: "They suddenly turn off location sharing during a night out. Guilty or not guilty?",
+		optionA: "GUILTY",
+		optionB: "NOT GUILTY",
+	},
+	{
+		gameType: "kruze-court",
+		label: "Deleted Messages",
+		prompt: "They delete a conversation because they know you would not like it. Guilty or not guilty?",
+		optionA: "GUILTY",
+		optionB: "NOT GUILTY",
+	},
+];
+
 function normalizeName(value: string) {
 	return value.replace(/\s+/g, " ").trim();
 }
@@ -249,6 +372,23 @@ function App() {
 		"kruze-court": "Kruze Court",
 		custom: "Custom Poll",
 	};
+
+	const matchingPresets = GAME_PRESETS.filter(
+		(preset) => preset.gameType === gameType,
+	);
+
+	function loadPreset(preset: GamePreset) {
+		setGameType(preset.gameType);
+		setGamePrompt(preset.prompt);
+		setGameOptionA(preset.optionA);
+		setGameOptionB(preset.optionB);
+	}
+
+	function loadRandomPreset() {
+		const pool = gameType === "custom" ? GAME_PRESETS : matchingPresets;
+		if (!pool.length) return;
+		loadPreset(pool[Math.floor(Math.random() * pool.length)]);
+	}
 
 	function startGamePoll() {
 		const prompt = gamePrompt.trim();
@@ -609,6 +749,35 @@ function App() {
 								<option value="kruze-court">Kruze Court</option>
 								<option value="custom">Custom Poll</option>
 							</select>
+
+							<div className="preset-library">
+								<div className="preset-library-head">
+									<span>Preset Round Library</span>
+									<button type="button" onClick={loadRandomPreset}>
+										Surprise Me
+									</button>
+								</div>
+
+								{gameType === "custom" ? (
+									<div className="preset-library-empty">
+										Custom mode uses your own question and choices. Surprise Me can load any preset.
+									</div>
+								) : (
+									<div className="preset-grid">
+										{matchingPresets.map((preset) => (
+											<button
+												type="button"
+												className="preset-chip"
+												key={preset.label}
+												onClick={() => loadPreset(preset)}
+											>
+												{preset.label}
+											</button>
+										))}
+									</div>
+								)}
+							</div>
+
 							<textarea
 								className="game-input game-question"
 								value={gamePrompt}
