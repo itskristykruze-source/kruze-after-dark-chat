@@ -187,6 +187,7 @@ function App() {
 	const [gameOptionA, setGameOptionA] = useState("");
 	const [gameOptionB, setGameOptionB] = useState("");
 	const [gameDuration, setGameDuration] = useState(30);
+	const [lastPresetLabel, setLastPresetLabel] = useState("");
 	const [now, setNow] = useState(() => Date.now());
 	const [moderationState, setModerationState] = useState<
 		"kicked" | "banned" | null
@@ -382,12 +383,33 @@ function App() {
 		setGamePrompt(preset.prompt);
 		setGameOptionA(preset.optionA);
 		setGameOptionB(preset.optionB);
+		setLastPresetLabel(preset.label);
 	}
 
 	function loadRandomPreset() {
 		const pool = gameType === "custom" ? GAME_PRESETS : matchingPresets;
 		if (!pool.length) return;
-		loadPreset(pool[Math.floor(Math.random() * pool.length)]);
+		const choices = pool.filter(
+			(preset) => pool.length === 1 || preset.label !== lastPresetLabel,
+		);
+		loadPreset(choices[Math.floor(Math.random() * choices.length)]);
+	}
+
+	function loadNextPreset() {
+		const pool = gameType === "custom" ? GAME_PRESETS : matchingPresets;
+		if (!pool.length) return;
+
+		const currentIndex = pool.findIndex(
+			(preset) => preset.label === lastPresetLabel,
+		);
+		const nextPreset =
+			currentIndex >= 0 ? pool[(currentIndex + 1) % pool.length] : pool[0];
+		loadPreset(nextPreset);
+	}
+
+	function prepareNextRound() {
+		socket.send(JSON.stringify({ type: "poll_clear" } satisfies Message));
+		loadNextPreset();
 	}
 
 	function startGamePoll() {
@@ -425,6 +447,51 @@ function App() {
 				choice,
 			} satisfies Message),
 		);
+	}
+
+	const hasLoadedRound = Boolean(
+		gamePrompt.trim() && gameOptionA.trim() && gameOptionB.trim(),
+	);
+	const runnerStage = poll
+		? pollIsOpen
+			? "voting"
+			: "results"
+		: hasLoadedRound
+			? "ready"
+			: "empty";
+
+	const runnerActionLabel =
+		runnerStage === "empty"
+			? "Load Round"
+			: runnerStage === "ready"
+				? "Start Voting"
+				: runnerStage === "voting"
+					? "Reveal Results"
+					: "Next Round";
+
+	const runnerStatusLabel =
+		runnerStage === "empty"
+			? "Waiting for a round"
+			: runnerStage === "ready"
+				? "Round loaded"
+				: runnerStage === "voting"
+					? `Voting live · ${remainingSeconds}s`
+					: "Results revealed";
+
+	function advanceShowRunner() {
+		if (runnerStage === "empty") {
+			loadNextPreset();
+			return;
+		}
+		if (runnerStage === "ready") {
+			startGamePoll();
+			return;
+		}
+		if (runnerStage === "voting") {
+			socket.send(JSON.stringify({ type: "poll_end" } satisfies Message));
+			return;
+		}
+		prepareNextRound();
 	}
 
 	function saveViewerName(e: React.FormEvent) {
@@ -555,8 +622,14 @@ function App() {
 								disabled={!pollIsOpen || accessRole !== "user"}
 							>
 								<span>{poll.optionA}</span>
-								<strong>{percentA}%</strong>
-								<i style={{ width: `${percentA}%` }} />
+								<strong>
+									{pollIsOpen
+										? poll.myVote === "a"
+											? "✓"
+											: "VOTE"
+										: `${percentA}%`}
+								</strong>
+								<i style={{ width: pollIsOpen ? "0%" : `${percentA}%` }} />
 							</button>
 							<button
 								type="button"
@@ -565,12 +638,22 @@ function App() {
 								disabled={!pollIsOpen || accessRole !== "user"}
 							>
 								<span>{poll.optionB}</span>
-								<strong>{percentB}%</strong>
-								<i style={{ width: `${percentB}%` }} />
+								<strong>
+									{pollIsOpen
+										? poll.myVote === "b"
+											? "✓"
+											: "VOTE"
+										: `${percentB}%`}
+								</strong>
+								<i style={{ width: pollIsOpen ? "0%" : `${percentB}%` }} />
 							</button>
 						</div>
 						<div className="live-poll-footer">
-							<span>{totalVotes} {totalVotes === 1 ? "vote" : "votes"}</span>
+							<span>
+								{pollIsOpen
+									? "Voting is live"
+									: `${totalVotes} ${totalVotes === 1 ? "vote" : "votes"}`}
+							</span>
 							{accessRole !== "user" && <span>Viewing results</span>}
 							{accessRole === "user" && poll.myVote && <span>Your vote is locked in</span>}
 						</div>
@@ -738,6 +821,21 @@ function App() {
 
 						<section className="host-control-card game-control-card">
 							<div className="host-control-label">Game Control Center</div>
+
+							<div className={`show-runner show-runner-${runnerStage}`}>
+								<div className="show-runner-copy">
+									<span>One-Click Show Runner</span>
+									<strong>{runnerStatusLabel}</strong>
+								</div>
+								<button
+									type="button"
+									className="show-runner-action"
+									onClick={advanceShowRunner}
+								>
+									{runnerActionLabel}
+								</button>
+							</div>
+
 							<select
 								className="game-select"
 								value={gameType}
@@ -846,12 +944,12 @@ function App() {
 											onClick={() => socket.send(JSON.stringify({ type: "poll_end" } satisfies Message))}
 											disabled={!pollIsOpen}
 										>
-											End Voting
+											Reveal Results
 										</button>
 										<button
 											type="button"
 											className="host-dashboard-button danger"
-											onClick={() => socket.send(JSON.stringify({ type: "poll_clear" } satisfies Message))}
+											onClick={prepareNextRound}
 										>
 											Next Round
 										</button>
