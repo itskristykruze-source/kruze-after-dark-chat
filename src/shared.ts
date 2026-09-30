@@ -13,6 +13,29 @@ export type BanEntry = {
 	user: string;
 };
 
+export type GameType =
+	| "red-flag"
+	| "would-you-rather"
+	| "truth-or-temptation"
+	| "kruze-court"
+	| "custom";
+
+export type PollChoice = "a" | "b";
+export type PollStatus = "open" | "closed";
+
+export type PollState = {
+	id: string;
+	gameType: GameType;
+	prompt: string;
+	optionA: string;
+	optionB: string;
+	status: PollStatus;
+	endsAt: number;
+	votesA: number;
+	votesB: number;
+	myVote?: PollChoice;
+};
+
 export type Message =
 	| {
 			type: "add";
@@ -53,6 +76,7 @@ export type Message =
 			type: "auth";
 			role: ChatRole;
 			bans?: BanEntry[];
+			poll?: PollState | null;
 	  }
 	| {
 			type: "bans";
@@ -65,4 +89,23 @@ export type Message =
 	| {
 			type: "all";
 			messages: ChatMessage[];
+	  }
+	| {
+			type: "poll_start";
+			poll: Omit<PollState, "votesA" | "votesB" | "myVote">;
+	  }
+	| {
+			type: "poll_vote";
+			pollId: string;
+			choice: PollChoice;
+	  }
+	| {
+			type: "poll_end";
+	  }
+	| {
+			type: "poll_clear";
+	  }
+	| {
+			type: "poll_state";
+			poll: PollState | null;
 	  };
