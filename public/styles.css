@@ -1338,3 +1338,94 @@ textarea.game-input {
 		min-height: 52px;
 	}
 }
+
+
+/* Preset round library */
+.preset-library {
+	margin: 2px 0 9px;
+	padding: 9px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.025);
+}
+
+.preset-library-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 7px;
+	color: #cfc8cd;
+	font-size: 8px;
+	font-weight: 900;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.preset-library-head button {
+	width: auto;
+	height: auto;
+	margin: 0;
+	padding: 4px 7px;
+	border: 1px solid rgba(255, 54, 87, 0.24);
+	border-radius: 7px;
+	background: rgba(214, 31, 60, 0.08);
+	color: #ff8da1;
+	font-size: 8px;
+	font-weight: 900;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+
+.preset-library-head button:hover {
+	border-color: rgba(255, 54, 87, 0.52);
+	background: rgba(214, 31, 60, 0.15);
+	color: #fff;
+}
+
+.preset-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 6px;
+}
+
+.preset-chip {
+	width: 100%;
+	min-height: 34px;
+	margin: 0;
+	padding: 7px 8px;
+	border: 1px solid rgba(255, 255, 255, 0.09);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.035);
+	color: #d8d2d6;
+	font-size: 8px;
+	font-weight: 800;
+	line-height: 1.2;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		border-color 0.15s ease,
+		background 0.15s ease,
+		transform 0.15s ease;
+}
+
+.preset-chip:hover {
+	border-color: rgba(255, 54, 87, 0.36);
+	background: rgba(214, 31, 60, 0.10);
+	color: #fff;
+	transform: translateY(-1px);
+}
+
+.preset-library-empty {
+	padding: 4px 1px 1px;
+	color: #777178;
+	font-size: 8px;
+	line-height: 1.45;
+}
+
+@media (max-width: 520px) {
+	.preset-grid {
+		grid-template-columns: 1fr;
+	}
+}
