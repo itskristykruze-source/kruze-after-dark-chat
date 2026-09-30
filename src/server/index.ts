@@ -7,13 +7,13 @@ import {
 } from "partyserver";
 
 import type {
-	type BanEntry,
-	type ChatMessage,
-	type ChatRole,
-	type GameType,
-	type Message,
-	type PollChoice,
-	type PollState,
+	BanEntry,
+	ChatMessage,
+	ChatRole,
+	GameType,
+	Message,
+	PollChoice,
+	PollState,
 } from "../shared";
 
 const HOST_TOKEN_HASH =
