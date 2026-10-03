@@ -36,6 +36,21 @@ export type PollState = {
 	myVote?: PollChoice;
 };
 
+export type RundownKind = "scene" | "game" | "break" | "custom";
+
+export type RundownItem = {
+	id: string;
+	label: string;
+	kind: RundownKind;
+	gameType?: GameType;
+	presetLabel?: string;
+};
+
+export type RundownState = {
+	items: RundownItem[];
+	activeIndex: number;
+};
+
 export type Message =
 	| {
 			type: "add";
@@ -77,6 +92,7 @@ export type Message =
 			role: ChatRole;
 			bans?: BanEntry[];
 			poll?: PollState | null;
+			rundown?: RundownState;
 	  }
 	| {
 			type: "bans";
@@ -89,6 +105,21 @@ export type Message =
 	| {
 			type: "all";
 			messages: ChatMessage[];
+	  }
+	| {
+			type: "rundown_set";
+			rundown: RundownState;
+	  }
+	| {
+			type: "rundown_advance";
+	  }
+	| {
+			type: "rundown_jump";
+			index: number;
+	  }
+	| {
+			type: "rundown_state";
+			rundown: RundownState;
 	  }
 	| {
 			type: "poll_start";
