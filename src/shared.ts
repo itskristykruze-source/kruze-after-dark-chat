@@ -51,6 +51,20 @@ export type RundownState = {
 	activeIndex: number;
 };
 
+export type ObsRemoteState = {
+	connected: boolean;
+	currentScene?: string;
+	streaming?: boolean;
+	scenes?: string[];
+	updatedAt: number;
+};
+
+export type ObsRemoteCommand =
+	| { action: "set_scene"; scene: string }
+	| { action: "start_stream" }
+	| { action: "stop_stream" }
+	| { action: "refresh" };
+
 export type Message =
 	| {
 			type: "add";
@@ -139,4 +153,15 @@ export type Message =
 	| {
 			type: "poll_state";
 			poll: PollState | null;
+	  }
+	| {
+			type: "obs_command";
+			command: ObsRemoteCommand;
+	  }
+	| {
+			type: "obs_state";
+			state: ObsRemoteState;
+	  }
+	| {
+			type: "obs_ping";
 	  };

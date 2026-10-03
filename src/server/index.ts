@@ -37,6 +37,7 @@ const RESERVED_NAMES = new Set([
 type ChatConnectionState = {
 	role: ChatRole;
 	viewerId: string;
+	isObsBridge: boolean;
 };
 
 function cleanName(value: string) {
@@ -200,7 +201,19 @@ export class Chat extends Server<Env> {
 			role = "mod";
 		}
 
-		connection.setState<ChatConnectionState>({ role, viewerId });
+		const requestedObsBridge = url.searchParams.get("bridge") === "obs";
+		const isObsBridge = requestedObsBridge && role === "host";
+		if (requestedObsBridge && role !== "host") {
+			connection.close(4001, "Unauthorized OBS bridge");
+			return;
+		}
+
+		connection.setState<ChatConnectionState>({ role, viewerId, isObsBridge });
+
+		if (isObsBridge) {
+			connection.send(JSON.stringify({ type: "obs_ping" } satisfies Message));
+			return;
+		}
 
 		if (
 			role === "user" &&
@@ -232,6 +245,8 @@ export class Chat extends Server<Env> {
 				messages: this.messages,
 			} satisfies Message),
 		);
+
+		if (role === "host") this.requestObsState();
 	}
 
 	saveMessage(message: ChatMessage) {
@@ -455,6 +470,34 @@ export class Chat extends Server<Env> {
 		}
 	}
 
+	sendToObsBridges(message: Message) {
+		const payload = JSON.stringify(message);
+		for (const connection of this.getConnections()) {
+			const state = connection.state as ChatConnectionState | null;
+			if (state?.role === "host" && state.isObsBridge) {
+				connection.send(payload);
+			}
+		}
+	}
+
+	broadcastObsState(state: ObsRemoteState) {
+		const payload = JSON.stringify({
+			type: "obs_state",
+			state,
+		} satisfies Message);
+
+		for (const connection of this.getConnections()) {
+			const targetState = connection.state as ChatConnectionState | null;
+			if (targetState?.role === "host" && !targetState.isObsBridge) {
+				connection.send(payload);
+			}
+		}
+	}
+
+	requestObsState() {
+		this.sendToObsBridges({ type: "obs_ping" });
+	}
+
 	advanceRundown() {
 		if (!this.rundown.items.length) return;
 		const nextIndex = Math.min(
@@ -503,6 +546,7 @@ export class Chat extends Server<Env> {
 		const state = connection.state as ChatConnectionState | null;
 		const role = state?.role || "user";
 		const viewerId = state?.viewerId || connection.id;
+		const isObsBridge = Boolean(state?.isObsBridge);
 		const canModerate = role === "host" || role === "mod";
 
 		if (role === "user" && this.bans.some((entry) => entry.viewerId === viewerId)) {
@@ -513,6 +557,57 @@ export class Chat extends Server<Env> {
 				} satisfies Message),
 			);
 			connection.close(4004, "Banned from chat");
+			return;
+		}
+
+		if (parsed.type === "obs_command") {
+			if (role !== "host" || isObsBridge) return;
+			const command = parsed.command;
+			if (command.action === "set_scene") {
+				const scene = cleanContent(command.scene).slice(0, 120);
+				if (!scene) return;
+				this.sendToObsBridges({
+					type: "obs_command",
+					command: { action: "set_scene", scene },
+				});
+				return;
+			}
+			if (
+				command.action === "start_stream" ||
+				command.action === "stop_stream" ||
+				command.action === "refresh"
+			) {
+				this.sendToObsBridges({ type: "obs_command", command });
+			}
+			return;
+		}
+
+		if (parsed.type === "obs_ping") {
+			if (role !== "host" || isObsBridge) return;
+			this.requestObsState();
+			return;
+		}
+
+		if (parsed.type === "obs_state") {
+			if (role !== "host" || !isObsBridge) return;
+			const nextState: ObsRemoteState = {
+				connected: Boolean(parsed.state.connected),
+				currentScene: parsed.state.currentScene
+					? cleanContent(parsed.state.currentScene).slice(0, 120)
+					: undefined,
+				streaming:
+					typeof parsed.state.streaming === "boolean"
+						? parsed.state.streaming
+						: undefined,
+				scenes: Array.isArray(parsed.state.scenes)
+					? parsed.state.scenes
+						.slice(0, 80)
+						.map((scene) => cleanContent(String(scene)).slice(0, 120))
+						.filter(Boolean)
+					: undefined,
+				updatedAt: Date.now(),
+			};
+			this.broadcastObsState(nextState);
 			return;
 		}
 

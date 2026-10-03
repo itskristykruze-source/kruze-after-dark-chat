@@ -1558,6 +1558,62 @@ textarea.game-input {
 	letter-spacing: 0.08em;
 }
 
+.remote-producer-pill.is-offline {
+	border-color: rgba(255, 151, 76, 0.25);
+	background: rgba(148, 76, 22, 0.14);
+	color: #f0b179;
+}
+
+.obs-scene-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 6px;
+	margin-top: 9px;
+}
+
+.obs-scene-grid button,
+.obs-stream-actions button {
+	min-height: 34px;
+	padding: 7px 8px;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.035);
+	color: #ddd7dc;
+	font-size: 8px;
+	font-weight: 900;
+	letter-spacing: 0.05em;
+	cursor: pointer;
+}
+
+.obs-scene-grid button.is-active {
+	border-color: rgba(74, 190, 120, 0.48);
+	background: rgba(37, 132, 76, 0.16);
+	color: #a8ebbf;
+}
+
+.obs-scene-grid button:disabled,
+.obs-stream-actions button:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+
+.obs-stream-actions {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 6px;
+	margin-top: 7px;
+}
+
+.obs-stream-actions button:first-child {
+	border-color: rgba(67, 191, 115, 0.25);
+	color: #9ce8b7;
+}
+
+.obs-stream-actions button.danger {
+	border-color: rgba(255, 72, 96, 0.28);
+	color: #ff8fa1;
+}
+
 .obs-remote-status {
 	display: flex;
 	align-items: center;
@@ -1805,6 +1861,11 @@ textarea.game-input {
 @media (max-width: 520px) {
 	.remote-producer-head {
 		flex-direction: column;
+	}
+
+	.obs-scene-grid,
+	.obs-stream-actions {
+		grid-template-columns: 1fr;
 	}
 
 	.rundown-now-grid,

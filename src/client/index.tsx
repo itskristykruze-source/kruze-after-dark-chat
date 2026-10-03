@@ -16,6 +16,8 @@ import {
 	type ChatRole,
 	type GameType,
 	type Message,
+	type ObsRemoteCommand,
+	type ObsRemoteState,
 	type PollChoice,
 	type PollState,
 	type RundownItem,
@@ -227,6 +229,8 @@ function App() {
 	const [gameOptionB, setGameOptionB] = useState("");
 	const [gameDuration, setGameDuration] = useState(30);
 	const [lastPresetLabel, setLastPresetLabel] = useState("");
+	const [obsState, setObsState] = useState<ObsRemoteState | null>(null);
+	const [obsNow, setObsNow] = useState(() => Date.now());
 	const [rundown, setRundown] = useState<RundownState>({
 		items: [],
 		activeIndex: -1,
@@ -322,6 +326,12 @@ function App() {
 				return;
 			}
 
+			if (message.type === "obs_state") {
+				setObsState(message.state);
+				setObsNow(Date.now());
+				return;
+			}
+
 			if (message.type === "delete") {
 				setMessages((current) =>
 					current.filter((item) => item.id !== message.id),
@@ -408,6 +418,21 @@ function App() {
 		const timer = window.setInterval(() => setNow(Date.now()), 500);
 		return () => window.clearInterval(timer);
 	}, [poll?.id, poll?.status]);
+
+	useEffect(() => {
+		if (!isHostDashboard) return;
+		const refresh = () => {
+			setObsNow(Date.now());
+			socket.send(JSON.stringify({ type: "obs_ping" } satisfies Message));
+		};
+		refresh();
+		const timer = window.setInterval(refresh, 10000);
+		return () => window.clearInterval(timer);
+	}, [isHostDashboard, socket]);
+
+	const obsBridgeOnline = Boolean(
+		obsState?.connected && obsNow - obsState.updatedAt < 25000,
+	);
 
 	const remainingSeconds = poll
 		? Math.max(0, Math.ceil((poll.endsAt - now) / 1000))
@@ -549,6 +574,26 @@ function App() {
 		prepareNextRound();
 	}
 
+	function sendObsCommand(command: ObsRemoteCommand) {
+		if (!obsBridgeOnline) return;
+		socket.send(
+			JSON.stringify({
+				type: "obs_command",
+				command,
+			} satisfies Message),
+		);
+	}
+
+	function sceneForRundownItem(item?: RundownItem) {
+		if (!item || item.kind !== "scene") return "";
+		const label = item.label.toUpperCase();
+		if (label.includes("STARTING SOON")) return "STARTING SOON";
+		if (label.includes("THANKS FOR WATCHING")) return "THANKS FOR WATCHING";
+		if (label.includes("KRUZE AFTER DARK")) return "KRUZE AFTER DARK";
+		if (label.includes("BE RIGHT BACK")) return "BE RIGHT BACK";
+		return item.label;
+	}
+
 	function applyRundownSelection(next: RundownState) {
 		const item = next.items[next.activeIndex];
 		if (!item || lastAppliedRundownId.current === item.id) return;
@@ -563,6 +608,11 @@ function App() {
 				) ||
 				GAME_PRESETS.find((candidate) => candidate.gameType === item.gameType);
 			if (preset) loadPreset(preset);
+		}
+
+		const scene = sceneForRundownItem(item);
+		if (scene && obsBridgeOnline) {
+			sendObsCommand({ action: "set_scene", scene });
 		}
 	}
 
@@ -949,15 +999,68 @@ function App() {
 							<div className="remote-producer-head">
 								<div>
 									<h2>Producer Control</h2>
-									<p>Run chat, games, and the show queue from a laptop, iPad, or phone anywhere with internet.</p>
+									<p>Control the room computer's OBS from this private dashboard.</p>
 								</div>
-								<span className="remote-producer-pill">REMOTE READY</span>
+								<span className={`remote-producer-pill ${obsBridgeOnline ? "is-online" : "is-offline"}`}>
+									{obsBridgeOnline ? "OBS ONLINE" : "OBS OFFLINE"}
+								</span>
+							</div>
+
+							<div className="obs-remote-status">
+								<span>Current scene</span>
+								<strong>{obsBridgeOnline ? obsState?.currentScene || "Connected" : "Bridge not connected"}</strong>
 							</div>
 							<div className="obs-remote-status">
-								<span>OBS scene switching</span>
-								<strong>SETUP NEEDED</strong>
+								<span>Stream</span>
+								<strong>{obsBridgeOnline ? (obsState?.streaming ? "LIVE" : "OFF AIR") : "—"}</strong>
 							</div>
-							<p className="host-control-muted">The website controls are remote now. We connect the room computer to OBS in the next setup step.</p>
+
+							<div className="obs-scene-grid">
+								{["STARTING SOON", "KRUZE AFTER DARK", "BE RIGHT BACK", "THANKS FOR WATCHING"].map((scene) => (
+									<button
+										type="button"
+										key={scene}
+										disabled={!obsBridgeOnline}
+										className={obsState?.currentScene === scene ? "is-active" : ""}
+										onClick={() => sendObsCommand({ action: "set_scene", scene })}
+									>
+										{scene}
+									</button>
+								))}
+							</div>
+
+							<div className="obs-stream-actions">
+								<button
+									type="button"
+									disabled={!obsBridgeOnline || Boolean(obsState?.streaming)}
+									onClick={() => sendObsCommand({ action: "start_stream" })}
+								>
+									START STREAM
+								</button>
+								<button
+									type="button"
+									className="danger"
+									disabled={!obsBridgeOnline || !obsState?.streaming}
+									onClick={() => {
+										if (window.confirm("Stop the OBS stream now?")) {
+											sendObsCommand({ action: "stop_stream" });
+										}
+									}}
+								>
+									STOP STREAM
+								</button>
+							</div>
+							<button
+								type="button"
+								className="host-dashboard-button"
+								onClick={() => socket.send(JSON.stringify({ type: "obs_ping" } satisfies Message))}
+							>
+								Refresh OBS Status
+							</button>
+
+							{!obsBridgeOnline && (
+								<p className="host-control-muted">Run the OBS Bridge on the room computer to activate these controls.</p>
+							)}
 						</section>
 
 						<section className="host-control-card rundown-card">
