@@ -18,6 +18,8 @@ import {
 	type Message,
 	type PollChoice,
 	type PollState,
+	type RundownItem,
+	type RundownState,
 } from "../shared";
 
 const CHAT_NAME_KEY = "kkChatName";
@@ -157,6 +159,43 @@ const GAME_PRESETS: GamePreset[] = [
 	},
 ];
 
+function makeDefaultRundown(): RundownItem[] {
+	return [
+		{ id: "scene-starting-soon", label: "STARTING SOON", kind: "scene" },
+		{ id: "scene-opening", label: "KRUZE AFTER DARK — OPENING", kind: "scene" },
+		{
+			id: "game-red-flag",
+			label: "RED FLAG — Phone Face Down",
+			kind: "game",
+			gameType: "red-flag",
+			presetLabel: "Phone Face Down",
+		},
+		{
+			id: "game-wyr",
+			label: "WOULD YOU RATHER — Date Night",
+			kind: "game",
+			gameType: "would-you-rather",
+			presetLabel: "Date Night",
+		},
+		{ id: "break-chat", label: "CHAT BREAK", kind: "break" },
+		{
+			id: "game-court",
+			label: "KRUZE COURT — Thirst Trap Likes",
+			kind: "game",
+			gameType: "kruze-court",
+			presetLabel: "Thirst Trap Likes",
+		},
+		{
+			id: "game-truth",
+			label: "TRUTH OR TEMPTATION — First Impression",
+			kind: "game",
+			gameType: "truth-or-temptation",
+			presetLabel: "First Impression",
+		},
+		{ id: "scene-closing", label: "THANKS FOR WATCHING", kind: "scene" },
+	];
+}
+
 function normalizeName(value: string) {
 	return value.replace(/\s+/g, " ").trim();
 }
@@ -188,6 +227,12 @@ function App() {
 	const [gameOptionB, setGameOptionB] = useState("");
 	const [gameDuration, setGameDuration] = useState(30);
 	const [lastPresetLabel, setLastPresetLabel] = useState("");
+	const [rundown, setRundown] = useState<RundownState>({
+		items: [],
+		activeIndex: -1,
+	});
+	const [newSegmentLabel, setNewSegmentLabel] = useState("");
+	const lastAppliedRundownId = useRef("");
 	const [now, setNow] = useState(() => Date.now());
 	const [moderationState, setModerationState] = useState<
 		"kicked" | "banned" | null
@@ -233,6 +278,10 @@ function App() {
 				setAccessRole(message.role);
 				if (message.bans) setBans(message.bans);
 				if (message.poll !== undefined) setPoll(message.poll);
+				if (message.rundown) {
+					setRundown(message.rundown);
+					applyRundownSelection(message.rundown);
+				}
 
 				const invalidPrivateLink =
 					(requestedHost && message.role !== "host") ||
@@ -264,6 +313,12 @@ function App() {
 
 			if (message.type === "poll_state") {
 				setPoll(message.poll);
+				return;
+			}
+
+			if (message.type === "rundown_state") {
+				setRundown(message.rundown);
+				applyRundownSelection(message.rundown);
 				return;
 			}
 
@@ -493,6 +548,97 @@ function App() {
 		}
 		prepareNextRound();
 	}
+
+	function applyRundownSelection(next: RundownState) {
+		const item = next.items[next.activeIndex];
+		if (!item || lastAppliedRundownId.current === item.id) return;
+		lastAppliedRundownId.current = item.id;
+
+		if (item.kind === "game" && item.gameType) {
+			const preset =
+				GAME_PRESETS.find(
+					(candidate) =>
+						candidate.gameType === item.gameType &&
+						(!item.presetLabel || candidate.label === item.presetLabel),
+				) ||
+				GAME_PRESETS.find((candidate) => candidate.gameType === item.gameType);
+			if (preset) loadPreset(preset);
+		}
+	}
+
+	function sendRundownState(next: RundownState) {
+		socket.send(
+			JSON.stringify({
+				type: "rundown_set",
+				rundown: next,
+			} satisfies Message),
+		);
+	}
+
+	function loadShowTemplate() {
+		lastAppliedRundownId.current = "";
+		sendRundownState({ items: makeDefaultRundown(), activeIndex: -1 });
+	}
+
+	function goToRundownIndex(index: number) {
+		lastAppliedRundownId.current = "";
+		socket.send(
+			JSON.stringify({
+				type: "rundown_jump",
+				index,
+			} satisfies Message),
+		);
+	}
+
+	function advanceRundown() {
+		lastAppliedRundownId.current = "";
+		socket.send(JSON.stringify({ type: "rundown_advance" } satisfies Message));
+	}
+
+	function moveRundownItem(index: number, delta: number) {
+		const target = index + delta;
+		if (target < 0 || target >= rundown.items.length) return;
+
+		const activeId = rundown.items[rundown.activeIndex]?.id;
+		const items = [...rundown.items];
+		[items[index], items[target]] = [items[target], items[index]];
+		const activeIndex = activeId
+			? items.findIndex((item) => item.id === activeId)
+			: -1;
+		sendRundownState({ items, activeIndex });
+	}
+
+	function removeRundownItem(index: number) {
+		const removed = rundown.items[index];
+		const activeId = rundown.items[rundown.activeIndex]?.id;
+		const items = rundown.items.filter((_, itemIndex) => itemIndex !== index);
+		const activeIndex =
+			activeId && activeId !== removed?.id
+				? items.findIndex((item) => item.id === activeId)
+				: -1;
+		sendRundownState({ items, activeIndex });
+	}
+
+	function addCustomSegment() {
+		const label = newSegmentLabel.trim();
+		if (!label) return;
+		const items = [
+			...rundown.items,
+			{
+				id: `custom-${nanoid(8)}`,
+				label: label.slice(0, 80),
+				kind: "custom" as const,
+			},
+		];
+		sendRundownState({ items, activeIndex: rundown.activeIndex });
+		setNewSegmentLabel("");
+	}
+
+	const activeRundownItem = rundown.items[rundown.activeIndex];
+	const upNextRundownItem =
+		rundown.activeIndex >= -1
+			? rundown.items[rundown.activeIndex + 1]
+			: undefined;
 
 	function saveViewerName(e: React.FormEvent) {
 		e.preventDefault();
@@ -796,6 +942,101 @@ function App() {
 							>
 								Clear Entire Chat
 							</button>
+						</section>
+
+						<section className="host-control-card remote-producer-card">
+							<div className="host-control-label">Remote Producer</div>
+							<div className="remote-producer-head">
+								<div>
+									<h2>Producer Control</h2>
+									<p>Run chat, games, and the show queue from a laptop, iPad, or phone anywhere with internet.</p>
+								</div>
+								<span className="remote-producer-pill">REMOTE READY</span>
+							</div>
+							<div className="obs-remote-status">
+								<span>OBS scene switching</span>
+								<strong>SETUP NEEDED</strong>
+							</div>
+							<p className="host-control-muted">The website controls are remote now. We connect the room computer to OBS in the next setup step.</p>
+						</section>
+
+						<section className="host-control-card rundown-card">
+							<div className="host-control-label">Show Rundown / Queue</div>
+							<div className="rundown-now-grid">
+								<div>
+									<span>LIVE NOW</span>
+									<strong>{activeRundownItem?.label || "Not started"}</strong>
+								</div>
+								<div>
+									<span>UP NEXT</span>
+									<strong>{upNextRundownItem?.label || "—"}</strong>
+								</div>
+							</div>
+
+							<button
+								type="button"
+								className="rundown-next-button"
+								onClick={advanceRundown}
+								disabled={!rundown.items.length || rundown.activeIndex >= rundown.items.length - 1}
+							>
+								{rundown.activeIndex < 0 ? "START SHOW" : "NEXT SEGMENT"}
+							</button>
+
+							<div className="rundown-actions">
+								<button type="button" onClick={loadShowTemplate}>Load Show Template</button>
+								<button
+									type="button"
+									onClick={() => {
+									if (rundown.activeIndex >= 0) goToRundownIndex(rundown.activeIndex);
+								}}
+									disabled={rundown.activeIndex < 0}
+								>
+									Repeat Current
+								</button>
+							</div>
+
+							{rundown.items.length === 0 ? (
+								<div className="rundown-empty">
+									Load the show template, then rearrange it before going live.
+								</div>
+							) : (
+								<div className="rundown-list">
+									{rundown.items.map((item, index) => (
+										<div
+											className={`rundown-row ${index === rundown.activeIndex ? "is-live" : ""}`}
+											key={item.id}
+										>
+											<div className="rundown-row-index">{index + 1}</div>
+											<div className="rundown-row-copy">
+												<strong>{item.label}</strong>
+												<span>{item.kind}{index === rundown.activeIndex ? " · LIVE" : ""}</span>
+											</div>
+											<div className="rundown-row-buttons">
+												<button type="button" onClick={() => moveRundownItem(index, -1)} disabled={index === 0}>↑</button>
+												<button type="button" onClick={() => moveRundownItem(index, 1)} disabled={index === rundown.items.length - 1}>↓</button>
+												<button type="button" onClick={() => goToRundownIndex(index)}>Go</button>
+												<button type="button" className="remove" onClick={() => removeRundownItem(index)}>×</button>
+											</div>
+										</div>
+									))}
+								</div>
+							)}
+
+							<div className="rundown-add-row">
+								<input
+									value={newSegmentLabel}
+									onChange={(event) => setNewSegmentLabel(event.target.value)}
+									onKeyDown={(event) => {
+										if (event.key === "Enter") {
+											event.preventDefault();
+											addCustomSegment();
+										}
+									}}
+									placeholder="Add custom segment..."
+									maxLength={80}
+								/>
+								<button type="button" onClick={addCustomSegment}>Add</button>
+							</div>
 						</section>
 
 						{showBans && (
