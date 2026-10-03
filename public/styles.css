@@ -1525,3 +1525,299 @@ textarea.game-input {
 		font-size: 9px;
 	}
 }
+
+
+/* Remote producer rundown */
+.remote-producer-card {
+	border-color: rgba(91, 178, 255, 0.22);
+	background:
+		radial-gradient(circle at 100% 0%, rgba(45, 121, 189, 0.12), transparent 35%),
+		linear-gradient(180deg, rgba(22, 24, 32, 0.96), rgba(12, 12, 17, 0.96));
+}
+
+.remote-producer-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.remote-producer-head h2 {
+	font-size: 18px;
+}
+
+.remote-producer-pill {
+	flex: 0 0 auto;
+	padding: 5px 7px;
+	border: 1px solid rgba(84, 202, 132, 0.25);
+	border-radius: 999px;
+	background: rgba(36, 112, 65, 0.16);
+	color: #9aebba;
+	font-size: 7px;
+	font-weight: 900;
+	letter-spacing: 0.08em;
+}
+
+.obs-remote-status {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	margin-top: 10px;
+	padding: 8px 9px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 9px;
+	background: rgba(255, 255, 255, 0.025);
+	font-size: 9px;
+}
+
+.obs-remote-status span {
+	color: #a7a0a6;
+}
+
+.obs-remote-status strong {
+	color: #f3c46c;
+	font-size: 8px;
+	letter-spacing: 0.08em;
+}
+
+.rundown-card {
+	border-color: rgba(255, 54, 87, 0.24);
+}
+
+.rundown-now-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 7px;
+	margin-bottom: 8px;
+}
+
+.rundown-now-grid > div {
+	min-width: 0;
+	padding: 9px;
+	border: 1px solid rgba(255, 255, 255, 0.09);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.025);
+}
+
+.rundown-now-grid span {
+	display: block;
+	margin-bottom: 4px;
+	color: #8d858c;
+	font-size: 7px;
+	font-weight: 900;
+	letter-spacing: 0.09em;
+}
+
+.rundown-now-grid strong {
+	display: block;
+	overflow: hidden;
+	color: #fff;
+	font-size: 9px;
+	line-height: 1.3;
+	text-overflow: ellipsis;
+}
+
+.rundown-now-grid > div:first-child {
+	border-color: rgba(255, 54, 87, 0.28);
+	background: rgba(214, 31, 60, 0.07);
+}
+
+.rundown-next-button {
+	width: 100%;
+	min-height: 44px;
+	margin: 0 0 7px;
+	padding: 9px 12px;
+	border: 1px solid rgba(255, 255, 255, 0.11);
+	border-radius: 9px;
+	background: linear-gradient(135deg, #ff3657, #a70f2a);
+	color: #fff;
+	font-size: 10px;
+	font-weight: 950;
+	letter-spacing: 0.10em;
+	text-transform: uppercase;
+	cursor: pointer;
+	box-shadow: 0 10px 22px rgba(214, 31, 60, 0.18);
+}
+
+.rundown-next-button:disabled {
+	opacity: 0.42;
+	cursor: not-allowed;
+}
+
+.rundown-actions {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+.rundown-actions button,
+.rundown-row-buttons button,
+.rundown-add-row button {
+	margin: 0;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	border-radius: 7px;
+	background: rgba(255, 255, 255, 0.04);
+	color: #cfc8cd;
+	font-size: 8px;
+	font-weight: 900;
+	cursor: pointer;
+}
+
+.rundown-actions button {
+	min-height: 31px;
+	padding: 6px 8px;
+}
+
+.rundown-actions button:disabled,
+.rundown-row-buttons button:disabled {
+	opacity: 0.32;
+	cursor: not-allowed;
+}
+
+.rundown-empty {
+	padding: 10px;
+	border: 1px dashed rgba(255, 255, 255, 0.10);
+	border-radius: 9px;
+	color: #857e84;
+	font-size: 9px;
+	line-height: 1.4;
+	text-align: center;
+}
+
+.rundown-list {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	max-height: 300px;
+	overflow-y: auto;
+	padding-right: 2px;
+}
+
+.rundown-row {
+	display: grid;
+	grid-template-columns: 22px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 7px;
+	padding: 7px;
+	border: 1px solid rgba(255, 255, 255, 0.075);
+	border-radius: 9px;
+	background: rgba(255, 255, 255, 0.022);
+}
+
+.rundown-row.is-live {
+	border-color: rgba(255, 54, 87, 0.42);
+	background: rgba(214, 31, 60, 0.10);
+	box-shadow: inset 3px 0 0 rgba(255, 54, 87, 0.75);
+}
+
+.rundown-row-index {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.055);
+	color: #a49ca2;
+	font-size: 8px;
+	font-weight: 900;
+}
+
+.rundown-row-copy {
+	min-width: 0;
+}
+
+.rundown-row-copy strong,
+.rundown-row-copy span {
+	display: block;
+}
+
+.rundown-row-copy strong {
+	overflow: hidden;
+	color: #ded8dc;
+	font-size: 9px;
+	line-height: 1.2;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.rundown-row-copy span {
+	margin-top: 2px;
+	color: #7f777d;
+	font-size: 7px;
+	font-weight: 800;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+
+.rundown-row.is-live .rundown-row-copy span {
+	color: #ff8397;
+}
+
+.rundown-row-buttons {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+}
+
+.rundown-row-buttons button {
+	min-width: 24px;
+	height: 24px;
+	padding: 0 5px;
+	line-height: 22px;
+}
+
+.rundown-row-buttons button.remove {
+	color: #ff8498;
+}
+
+.rundown-add-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.rundown-add-row input {
+	min-width: 0;
+	height: 32px;
+	padding: 0 9px;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	border-radius: 8px;
+	background: #0c0c11;
+	color: #f1edf0;
+	font-size: 9px;
+	outline: none;
+}
+
+.rundown-add-row input:focus {
+	border-color: rgba(255, 54, 87, 0.54);
+}
+
+.rundown-add-row button {
+	min-width: 45px;
+	height: 32px;
+	padding: 0 9px;
+}
+
+@media (max-width: 520px) {
+	.remote-producer-head {
+		flex-direction: column;
+	}
+
+	.rundown-now-grid,
+	.rundown-actions {
+		grid-template-columns: 1fr;
+	}
+
+	.rundown-row {
+		grid-template-columns: 22px minmax(0, 1fr);
+	}
+
+	.rundown-row-buttons {
+		grid-column: 1 / -1;
+		justify-content: flex-end;
+	}
+}
