@@ -14,6 +14,8 @@ import type {
 	Message,
 	PollChoice,
 	PollState,
+	RundownItem,
+	RundownState,
 } from "../shared";
 
 const HOST_TOKEN_HASH =
@@ -68,6 +70,7 @@ export class Chat extends Server<Env> {
 	messages = [] as ChatMessage[];
 	bans = [] as BanEntry[];
 	poll = null as PollState | null;
+	rundown = { items: [], activeIndex: -1 } as RundownState;
 
 	broadcastMessage(message: Message, exclude?: string[]) {
 		this.broadcast(JSON.stringify(message), exclude);
@@ -158,6 +161,32 @@ export class Chat extends Server<Env> {
 			const counts = this.getPollCounts(pollRows[0].id);
 			this.poll = { ...pollRows[0], ...counts };
 		}
+
+		this.ctx.storage.sql.exec(
+			`CREATE TABLE IF NOT EXISTS rundown_state (
+				id INTEGER PRIMARY KEY CHECK (id = 1),
+				items_json TEXT,
+				active_index INTEGER
+			)`,
+		);
+
+		const rundownRows = this.ctx.storage.sql
+			.exec(
+				`SELECT items_json AS itemsJson, active_index AS activeIndex
+				 FROM rundown_state WHERE id = 1`,
+			)
+			.toArray() as Array<{ itemsJson: string; activeIndex: number }>;
+
+		if (rundownRows[0]) {
+			try {
+				this.rundown = this.normalizeRundown({
+					items: JSON.parse(rundownRows[0].itemsJson) as RundownItem[],
+					activeIndex: Number(rundownRows[0].activeIndex),
+				});
+			} catch {
+				this.rundown = { items: [], activeIndex: -1 };
+			}
+		}
 	}
 
 	async onConnect(connection: Connection, ctx: ConnectionContext) {
@@ -193,6 +222,7 @@ export class Chat extends Server<Env> {
 				role,
 				bans: role === "host" || role === "mod" ? this.bans : undefined,
 				poll: this.getPollForViewer(viewerId),
+				rundown: role === "host" ? this.rundown : undefined,
 			} satisfies Message),
 		);
 
@@ -349,6 +379,100 @@ export class Chat extends Server<Env> {
 		this.broadcastPollState();
 	}
 
+	normalizeRundown(input: RundownState): RundownState {
+		const allowedKinds = new Set(["scene", "game", "break", "custom"]);
+		const allowedGames = new Set<GameType>([
+			"red-flag",
+			"would-you-rather",
+			"truth-or-temptation",
+			"kruze-court",
+			"custom",
+		]);
+		const rawItems = Array.isArray(input?.items) ? input.items : [];
+
+		const items = rawItems
+			.slice(0, 24)
+			.map((item) => {
+				if (!item || typeof item !== "object") return null;
+				const label = cleanContent(String(item.label || "")).slice(0, 80);
+				const kind = String(item.kind || "");
+				if (!label || !allowedKinds.has(kind)) return null;
+
+				const gameType =
+					item.gameType && allowedGames.has(item.gameType)
+						? item.gameType
+						: undefined;
+				const presetLabel = item.presetLabel
+					? cleanContent(String(item.presetLabel)).slice(0, 80)
+					: undefined;
+
+				return {
+					id: cleanViewerId(String(item.id || "")) || crypto.randomUUID(),
+					label,
+					kind: kind as RundownItem["kind"],
+					gameType,
+					presetLabel,
+				} satisfies RundownItem;
+			})
+			.filter((item): item is RundownItem => Boolean(item));
+
+		const requestedIndex = Number(input?.activeIndex);
+		const activeIndex =
+			items.length === 0
+				? -1
+				: Math.min(
+						Math.max(Number.isInteger(requestedIndex) ? requestedIndex : -1, -1),
+						items.length - 1,
+					);
+
+		return { items, activeIndex };
+	}
+
+	saveRundown(next: RundownState) {
+		this.rundown = this.normalizeRundown(next);
+		this.ctx.storage.sql.exec(
+			`INSERT INTO rundown_state (id, items_json, active_index)
+			 VALUES (1, ?, ?)
+			 ON CONFLICT (id) DO UPDATE SET
+				items_json = ?, active_index = ?`,
+			JSON.stringify(this.rundown.items),
+			this.rundown.activeIndex,
+			JSON.stringify(this.rundown.items),
+			this.rundown.activeIndex,
+		);
+		this.broadcastRundownState();
+	}
+
+	broadcastRundownState() {
+		const payload = JSON.stringify({
+			type: "rundown_state",
+			rundown: this.rundown,
+		} satisfies Message);
+
+		for (const connection of this.getConnections()) {
+			const state = connection.state as ChatConnectionState | null;
+			if (state?.role === "host") connection.send(payload);
+		}
+	}
+
+	advanceRundown() {
+		if (!this.rundown.items.length) return;
+		const nextIndex = Math.min(
+			this.rundown.activeIndex + 1,
+			this.rundown.items.length - 1,
+		);
+		this.saveRundown({ ...this.rundown, activeIndex: nextIndex });
+	}
+
+	jumpRundown(index: number) {
+		if (!this.rundown.items.length) return;
+		const nextIndex = Math.min(
+			Math.max(Number.isInteger(index) ? index : 0, 0),
+			this.rundown.items.length - 1,
+		);
+		this.saveRundown({ ...this.rundown, activeIndex: nextIndex });
+	}
+
 	removeViewer(viewerId: string, action: "kicked" | "banned") {
 		const payload = JSON.stringify({
 			type: "moderation",
@@ -435,6 +559,24 @@ export class Chat extends Server<Env> {
 					target.send(modPayload);
 				}
 			}
+			return;
+		}
+
+		if (parsed.type === "rundown_set") {
+			if (role !== "host") return;
+			this.saveRundown(parsed.rundown);
+			return;
+		}
+
+		if (parsed.type === "rundown_advance") {
+			if (role !== "host") return;
+			this.advanceRundown();
+			return;
+		}
+
+		if (parsed.type === "rundown_jump") {
+			if (role !== "host") return;
+			this.jumpRundown(parsed.index);
 			return;
 		}
 
