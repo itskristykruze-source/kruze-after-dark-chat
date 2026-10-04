@@ -19,7 +19,7 @@ import type {
 } from "../shared";
 
 const HOST_TOKEN_HASH =
-	"da5dea35683c0df169f94452804ae1a86cd1a256cb181f60958eeee020535b9b";
+	"1f9d5a983c0ece1ea6a230b27a374ac92a50956244ff1684a41afba0b33763b4";
 const MOD_TOKEN_HASH =
 	"defb7a2dbdae5272d7982c443e13a2e1b1d78c9d96727773a635fa5ba893d0eb";
 
