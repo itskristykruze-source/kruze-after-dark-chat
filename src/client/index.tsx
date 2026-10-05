@@ -26,6 +26,7 @@ import {
 
 const CHAT_NAME_KEY = "kkChatName";
 const VIEWER_ID_KEY = "kkViewerId";
+const CONTROL_ROOM_ID = "w2oNVkPpamyb3yEEayvlS";
 
 const RESERVED_NAMES = [
 	"kristy",
@@ -215,8 +216,95 @@ function getViewerId() {
 	}
 }
 
-function App() {
-	const { room } = useParams();
+function ControlLogin() {
+	const [passcode, setPasscode] = useState("");
+	const [error, setError] = useState("");
+	const [busy, setBusy] = useState(false);
+
+	useEffect(() => {
+		let active = true;
+		fetch(`/parties/chat/${CONTROL_ROOM_ID}/control-session`, {
+			credentials: "same-origin",
+		})
+			.then((response) => response.json() as Promise<{ ok?: boolean }>)
+			.then((data) => {
+				if (active && data.ok) window.location.replace("/control/dashboard");
+			})
+			.catch(() => {});
+		return () => {
+			active = false;
+		};
+	}, []);
+
+	async function submit(e: React.FormEvent) {
+		e.preventDefault();
+		if (!passcode.trim() || busy) return;
+		setBusy(true);
+		setError("");
+
+		try {
+			const response = await fetch(
+				`/parties/chat/${CONTROL_ROOM_ID}/control-login`,
+				{
+					method: "POST",
+					credentials: "same-origin",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ passcode }),
+				},
+			);
+			const data = (await response.json()) as { ok?: boolean; error?: string };
+			if (!response.ok || !data.ok) {
+				setError(data.error || "Could not unlock the control room.");
+				return;
+			}
+			window.location.assign("/control/dashboard");
+		} catch {
+			setError("Could not reach the control room. Try again.");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	return (
+		<div className="chat-app">
+			<div className="name-gate" role="dialog" aria-modal="true">
+				<form className="name-card" onSubmit={submit}>
+					<div className="name-kicker">Private Host Control Room</div>
+					<h2>Kristy Kruze Control</h2>
+					<p>Enter the private control passcode to open the producer dashboard.</p>
+					<input
+						autoFocus
+						type="password"
+						value={passcode}
+						onChange={(e) => {
+							setPasscode(e.target.value);
+							setError("");
+						}}
+						placeholder="Control passcode"
+						autoComplete="current-password"
+					/>
+					{error && <div className="name-error">{error}</div>}
+					<button type="submit" className="name-join-button" disabled={busy}>
+						{busy ? "Unlocking..." : "Open Control Room"}
+					</button>
+					<div className="name-note">
+						This device stays signed in for 7 days.
+					</div>
+				</form>
+			</div>
+		</div>
+	);
+}
+
+function App({
+	roomOverride,
+	requireHost = false,
+}: {
+	roomOverride?: string;
+	requireHost?: boolean;
+}) {
+	const { room: routeRoom } = useParams();
+	const room = roomOverride || routeRoom || CONTROL_ROOM_ID;
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [bans, setBans] = useState<BanEntry[]>([]);
 	const [showBans, setShowBans] = useState(false);
@@ -280,6 +368,17 @@ function App() {
 
 			if (message.type === "auth") {
 				setAccessRole(message.role);
+				if (message.role === "host") {
+					setName("Kristy Kruze");
+					setNameDraft("Kristy Kruze");
+				} else if (message.role === "mod") {
+					setName("Moderator");
+					setNameDraft("Moderator");
+				}
+				if (requireHost && message.role !== "host") {
+					window.location.replace("/control");
+					return;
+				}
 				if (message.bans) setBans(message.bans);
 				if (message.poll !== undefined) setPoll(message.poll);
 				if (message.rundown) {
@@ -1462,6 +1561,11 @@ createRoot(document.getElementById("root")!).render(
 	<BrowserRouter>
 		<Routes>
 			<Route path="/" element={<Navigate to={`/${nanoid()}`} />} />
+			<Route path="/control" element={<ControlLogin />} />
+			<Route
+				path="/control/dashboard"
+				element={<App roomOverride={CONTROL_ROOM_ID} requireHost />}
+			/>
 			<Route path="/:room" element={<App />} />
 			<Route path="*" element={<Navigate to="/" />} />
 		</Routes>
