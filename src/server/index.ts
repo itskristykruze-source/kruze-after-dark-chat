@@ -22,6 +22,13 @@ const HOST_TOKEN_HASH =
 	"182bdb2ba72e791200fadbbb7584003753cf1eb76dbc29b0432a1cd8eccf46dc";
 const MOD_TOKEN_HASH =
 	"defb7a2dbdae5272d7982c443e13a2e1b1d78c9d96727773a635fa5ba893d0eb";
+const CONTROL_PASSCODE_HASH =
+	"b5f677d2b54da9552a191f172fa6327c7e23e9e2713cac8e095b0372de262982";
+const CONTROL_SESSION_COOKIE = "kk_host_session";
+const CONTROL_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const CONTROL_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+const CONTROL_LOCKOUT_MS = 15 * 60 * 1000;
+const CONTROL_MAX_ATTEMPTS = 5;
 
 const RESERVED_NAMES = new Set([
 	"kristy",
@@ -65,6 +72,22 @@ async function matchesToken(value: string | null, expectedHash: string) {
 	return (await sha256(value)) === expectedHash;
 }
 
+function getCookie(request: Request, name: string) {
+	const raw = request.headers.get("Cookie") || "";
+	for (const part of raw.split(";")) {
+		const [key, ...rest] = part.trim().split("=");
+		if (key === name) return decodeURIComponent(rest.join("="));
+	}
+	return "";
+}
+
+function jsonResponse(data: unknown, status = 200, headers?: HeadersInit) {
+	const responseHeaders = new Headers(headers);
+	responseHeaders.set("Content-Type", "application/json; charset=utf-8");
+	responseHeaders.set("Cache-Control", "no-store");
+	return new Response(JSON.stringify(data), { status, headers: responseHeaders });
+}
+
 export class Chat extends Server<Env> {
 	static options = { hibernate: true };
 
@@ -102,6 +125,22 @@ export class Chat extends Server<Env> {
 				viewer_id TEXT PRIMARY KEY,
 				user TEXT,
 				created_at INTEGER
+			)`,
+		);
+
+		this.ctx.storage.sql.exec(
+			`CREATE TABLE IF NOT EXISTS control_sessions (
+				session_id TEXT PRIMARY KEY,
+				expires_at INTEGER NOT NULL
+			)`,
+		);
+
+		this.ctx.storage.sql.exec(
+			`CREATE TABLE IF NOT EXISTS control_login_attempts (
+				ip TEXT PRIMARY KEY,
+				attempts INTEGER NOT NULL,
+				window_start INTEGER NOT NULL,
+				blocked_until INTEGER NOT NULL
 			)`,
 		);
 
@@ -190,6 +229,166 @@ export class Chat extends Server<Env> {
 		}
 	}
 
+	private controlCookiePath() {
+		return `/parties/chat/${encodeURIComponent(this.name)}`;
+	}
+
+	private isValidControlSession(request: Request) {
+		const sessionId = getCookie(request, CONTROL_SESSION_COOKIE);
+		if (!sessionId) return false;
+
+		const rows = this.ctx.storage.sql
+			.exec(
+				`SELECT expires_at AS expiresAt
+				 FROM control_sessions
+				 WHERE session_id = ?`,
+				sessionId,
+			)
+			.toArray() as Array<{ expiresAt: number }>;
+
+		const expiresAt = Number(rows[0]?.expiresAt || 0);
+		if (!expiresAt || expiresAt <= Date.now()) {
+			if (sessionId) {
+				this.ctx.storage.sql.exec(
+					`DELETE FROM control_sessions WHERE session_id = ?`,
+					sessionId,
+				);
+			}
+			return false;
+		}
+
+		return true;
+	}
+
+	async onRequest(request: Request) {
+		const url = new URL(request.url);
+		const path = url.pathname;
+		const cookiePath = this.controlCookiePath();
+		const origin = request.headers.get("Origin");
+
+		if (origin && origin !== url.origin) {
+			return jsonResponse({ ok: false, error: "Invalid origin." }, 403);
+		}
+
+		if (request.method === "GET" && path.endsWith("/control-session")) {
+			return jsonResponse({ ok: this.isValidControlSession(request) });
+		}
+
+		if (request.method === "POST" && path.endsWith("/control-logout")) {
+			const sessionId = getCookie(request, CONTROL_SESSION_COOKIE);
+			if (sessionId) {
+				this.ctx.storage.sql.exec(
+					`DELETE FROM control_sessions WHERE session_id = ?`,
+					sessionId,
+				);
+			}
+			return jsonResponse(
+				{ ok: true },
+				200,
+				{
+					"Set-Cookie": `${CONTROL_SESSION_COOKIE}=; Path=${cookiePath}; HttpOnly; Secure; SameSite=Strict; Max-Age=0`,
+				},
+			);
+		}
+
+		if (request.method === "POST" && path.endsWith("/control-login")) {
+			const now = Date.now();
+			const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+			const attemptRows = this.ctx.storage.sql
+				.exec(
+					`SELECT attempts, window_start AS windowStart,
+						blocked_until AS blockedUntil
+					 FROM control_login_attempts WHERE ip = ?`,
+					ip,
+				)
+				.toArray() as Array<{
+					attempts: number;
+					windowStart: number;
+					blockedUntil: number;
+				}>;
+
+			const current = attemptRows[0];
+			if (current && Number(current.blockedUntil) > now) {
+				return jsonResponse(
+					{ ok: false, error: "Too many attempts. Try again in 15 minutes." },
+					429,
+				);
+			}
+
+			let passcode = "";
+			try {
+				const body = (await request.json()) as { passcode?: unknown };
+				passcode = typeof body?.passcode === "string" ? body.passcode.trim() : "";
+			} catch {
+				return jsonResponse({ ok: false, error: "Invalid request." }, 400);
+			}
+
+			const valid = await matchesToken(passcode, CONTROL_PASSCODE_HASH);
+			if (!valid) {
+				const withinWindow =
+					current && now - Number(current.windowStart) <= CONTROL_ATTEMPT_WINDOW_MS;
+				const attempts = (withinWindow ? Number(current.attempts) : 0) + 1;
+				const windowStart = withinWindow ? Number(current.windowStart) : now;
+				const blockedUntil =
+					attempts >= CONTROL_MAX_ATTEMPTS ? now + CONTROL_LOCKOUT_MS : 0;
+
+				this.ctx.storage.sql.exec(
+					`INSERT INTO control_login_attempts
+						(ip, attempts, window_start, blocked_until)
+					 VALUES (?, ?, ?, ?)
+					 ON CONFLICT (ip) DO UPDATE SET
+						attempts = ?, window_start = ?, blocked_until = ?`,
+					ip,
+					attempts,
+					windowStart,
+					blockedUntil,
+					attempts,
+					windowStart,
+					blockedUntil,
+				);
+
+				return jsonResponse(
+					{
+						ok: false,
+						error:
+							blockedUntil > now
+								? "Too many attempts. Try again in 15 minutes."
+								: "Incorrect control passcode.",
+					},
+					blockedUntil > now ? 429 : 401,
+				);
+			}
+
+			this.ctx.storage.sql.exec(
+				`DELETE FROM control_login_attempts WHERE ip = ?`,
+				ip,
+			);
+			this.ctx.storage.sql.exec(
+				`DELETE FROM control_sessions WHERE expires_at <= ?`,
+				now,
+			);
+
+			const sessionId = crypto.randomUUID().replace(/-/g, "");
+			const expiresAt = now + CONTROL_SESSION_TTL_MS;
+			this.ctx.storage.sql.exec(
+				`INSERT INTO control_sessions (session_id, expires_at)
+				 VALUES (?, ?)`,
+				sessionId,
+				expiresAt,
+			);
+
+			return jsonResponse(
+				{ ok: true },
+				200,
+				{
+					"Set-Cookie": `${CONTROL_SESSION_COOKIE}=${encodeURIComponent(sessionId)}; Path=${cookiePath}; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.floor(CONTROL_SESSION_TTL_MS / 1000)}`,
+				},
+			);
+		}
+
+		return jsonResponse({ ok: false, error: "Not found." }, 404);
+	}
+
 	async onConnect(connection: Connection, ctx: ConnectionContext) {
 		const url = new URL(ctx.request.url);
 		const viewerId = cleanViewerId(url.searchParams.get("viewer") || connection.id);
@@ -199,6 +398,8 @@ export class Chat extends Server<Env> {
 			role = "host";
 		} else if (await matchesToken(url.searchParams.get("mod"), MOD_TOKEN_HASH)) {
 			role = "mod";
+		} else if (this.isValidControlSession(ctx.request)) {
+			role = "host";
 		}
 
 		const requestedObsBridge = url.searchParams.get("bridge") === "obs";
